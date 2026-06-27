@@ -102,7 +102,7 @@ async function scanConfigSourceCandidate(candidate, { fetchImpl, now }) {
       kind: 'config',
       ok: true,
       status: 'ready',
-      message: `可导入配置，识别到 ${parsed.sites.length} 个站点。`,
+      message: buildConfigScanMessage(parsed.sites.length, diagnostics),
       source: parsed.source,
       sites: parsed.sites,
       siteCount: parsed.sites.length,
@@ -119,6 +119,14 @@ async function scanConfigSourceCandidate(candidate, { fetchImpl, now }) {
       message: error?.message || '配置接口检测失败',
     });
   }
+}
+
+function buildConfigScanMessage(siteCount, diagnostics) {
+  if (siteCount > 0 && diagnostics.searchableSites === 0 && diagnostics.pluginSites > 0) {
+    return `可导入配置，识别到 ${siteCount} 个站点；但都是插件源，当前版本只展示，不执行本地搜索。`;
+  }
+
+  return `可导入配置，识别到 ${siteCount} 个站点。`;
 }
 
 function classifyConfigScanFailure(error) {

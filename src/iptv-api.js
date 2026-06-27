@@ -170,6 +170,7 @@ async function fetchJson(url, fetchImpl) {
     response = await fetchImpl(url, {
       headers: {
         Accept: 'application/json, text/plain;q=0.9, */*;q=0.8',
+        'User-Agent': 'okhttp/4.10.0',
       },
     });
   } catch (error) {
@@ -198,6 +199,7 @@ async function fetchText(url, fetchImpl) {
     response = await fetchImpl(url, {
       headers: {
         Accept: 'application/vnd.apple.mpegurl, audio/mpegurl, text/plain;q=0.9, */*;q=0.8',
+        'User-Agent': 'okhttp/4.10.0',
       },
     });
   } catch (error) {

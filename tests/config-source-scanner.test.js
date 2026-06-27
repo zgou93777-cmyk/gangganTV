@@ -135,6 +135,31 @@ test('scanConfigSourceText classifies TVBox configs, plugin sources, invalid url
   assert.match(results[3].message, /链接格式错误/);
 });
 
+test('scanConfigSourceText explains configs that only contain plugin sites', async () => {
+  const results = await scanConfigSourceText('https://config.example.com/plugin-only.json', {
+    fetchImpl: async () =>
+      jsonResponse({
+        sites: [
+          {
+            key: 'cat-one',
+            name: 'Cat One',
+            type: 3,
+            api: 'csp_Demo',
+          },
+        ],
+      }),
+  });
+
+  assert.equal(results[0].ok, true);
+  assert.equal(results[0].siteCount, 1);
+  assert.equal(results[0].searchableCount, 0);
+  assert.equal(results[0].pluginCount, 1);
+  assert.equal(
+    results[0].message,
+    '可导入配置，识别到 1 个站点；但都是插件源，当前版本只展示，不执行本地搜索。'
+  );
+});
+
 function jsonResponse(body, status = 200) {
   return {
     ok: status >= 200 && status < 300,

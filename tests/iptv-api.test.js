@@ -22,8 +22,8 @@ function jsonResponse(body, status = 200) {
 
 test('fetchTvBoxConfig loads and parses TVBox configs with injected fetch', async () => {
   const calls = [];
-  const fetchImpl = async (url) => {
-    calls.push(url);
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, headers: options.headers });
     return jsonResponse({
       name: '远程配置',
       sites: [
@@ -44,7 +44,15 @@ test('fetchTvBoxConfig loads and parses TVBox configs with injected fetch', asyn
     () => '2026-06-27T10:00:00.000Z'
   );
 
-  assert.deepEqual(calls, ['https://config.example.com/tvbox.json']);
+  assert.deepEqual(calls, [
+    {
+      url: 'https://config.example.com/tvbox.json',
+      headers: {
+        Accept: 'application/json, text/plain;q=0.9, */*;q=0.8',
+        'User-Agent': 'okhttp/4.10.0',
+      },
+    },
+  ]);
   assert.equal(parsed.source.name, '远程配置');
   assert.equal(parsed.sites[0].name, '示例站');
 });
