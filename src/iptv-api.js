@@ -5,13 +5,19 @@ const {
   isValidHttpUrl,
   normalizeDetailResponse,
   normalizeSearchResponse,
+  parseM3uPlaylist,
   parseTvBoxConfig,
 } = require('./iptv-core');
 
 const BUILT_IN_MOCK_CONFIG_URL = 'mock://demo-tvbox';
+const BUILT_IN_MOCK_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
 const BUILT_IN_MOCK_SITE_API = 'mock://demo-tvbox/api';
 const BUILT_IN_MOCK_VIDEO_URL =
   'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8';
+const BUILT_IN_MOCK_LIVE_PLAYLIST = `#EXTM3U
+#EXTINF:-1 group-title="Test",Apple HLS Test Channel
+${BUILT_IN_MOCK_VIDEO_URL}
+`;
 
 const BUILT_IN_MOCK_CONFIG = {
   name: 'Built-in Test Source',
@@ -67,6 +73,27 @@ async function fetchTvBoxConfig(
 
   const json = await fetchJson(cleanUrl, fetchImpl);
   return parseTvBoxConfig(json, cleanUrl, now());
+}
+
+async function fetchM3uPlaylist(url, fetchImpl = fetch) {
+  const cleanUrl = typeof url === 'string' ? url.trim() : '';
+
+  if (isBuiltInMockLivePlaylistUrl(cleanUrl)) {
+    return parseM3uPlaylist(BUILT_IN_MOCK_LIVE_PLAYLIST, cleanUrl);
+  }
+
+  if (!isValidHttpUrl(cleanUrl)) {
+    throw new Error('直播列表地址需要以 http:// 或 https:// 开头');
+  }
+
+  const text = await fetchText(cleanUrl, fetchImpl);
+  const channels = parseM3uPlaylist(text, cleanUrl);
+
+  if (!channels.length) {
+    throw new Error('直播列表里没有可播放频道');
+  }
+
+  return channels;
 }
 
 async function fetchTvBoxSearch(site, keyword, fetchImpl = fetch) {
@@ -164,6 +191,30 @@ async function fetchJson(url, fetchImpl) {
   }
 }
 
+async function fetchText(url, fetchImpl) {
+  let response;
+
+  try {
+    response = await fetchImpl(url, {
+      headers: {
+        Accept: 'application/vnd.apple.mpegurl, audio/mpegurl, text/plain;q=0.9, */*;q=0.8',
+      },
+    });
+  } catch (error) {
+    throw new Error(`网络请求失败：${error?.message || '无法连接'}`);
+  }
+
+  if (!response.ok) {
+    throw new Error(`请求失败：HTTP ${response.status}`);
+  }
+
+  if (typeof response.text !== 'function') {
+    throw new Error('接口没有返回文本内容');
+  }
+
+  return response.text();
+}
+
 function ensureSearchableSite(site) {
   if (site?.unsupportedReason) {
     throw new Error(site.unsupportedReason);
@@ -186,14 +237,23 @@ function isBuiltInMockConfigUrl(url) {
   return typeof url === 'string' && url.trim().toLowerCase() === BUILT_IN_MOCK_CONFIG_URL;
 }
 
+function isBuiltInMockLivePlaylistUrl(url) {
+  return (
+    typeof url === 'string' &&
+    url.trim().toLowerCase() === BUILT_IN_MOCK_LIVE_PLAYLIST_URL
+  );
+}
+
 function isBuiltInMockSite(site) {
   return site?.api === BUILT_IN_MOCK_SITE_API || site?.sourceId === BUILT_IN_MOCK_CONFIG_URL;
 }
 
 module.exports = {
+  fetchM3uPlaylist,
   fetchTvBoxConfig,
   fetchTvBoxDetail,
   fetchTvBoxSearch,
   isBuiltInMockConfigUrl,
+  isBuiltInMockLivePlaylistUrl,
   resolveTvBoxEpisode,
 };

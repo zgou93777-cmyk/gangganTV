@@ -20,10 +20,92 @@ function getPlayableUrlIssue(value) {
   const pathname = new URL(cleanValue).pathname.toLowerCase();
 
   if (pathname.endsWith('.m3u')) {
-    return '这是频道列表地址，不是单个视频流。请先从列表里选择具体频道的 m3u8/mp4 地址。';
+    return '这是频道列表地址，不是单个视频流。请在直播列表里导入后选择频道播放。';
   }
 
   return '';
+}
+
+function parseM3uPlaylist(text, sourceUrl = '') {
+  const lines = readableText(text)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const channels = [];
+  let pendingInfo = null;
+
+  lines.forEach((line) => {
+    if (line.startsWith('#EXTINF')) {
+      pendingInfo = parseExtInf(line);
+      return;
+    }
+
+    if (line.startsWith('#')) {
+      return;
+    }
+
+    const channelUrl = resolvePlaylistUrl(line, sourceUrl);
+
+    if (!isValidHttpUrl(channelUrl)) {
+      pendingInfo = null;
+      return;
+    }
+
+    channels.push({
+      id: `channel-${channels.length + 1}`,
+      name: pendingInfo?.name || `频道 ${channels.length + 1}`,
+      group: pendingInfo?.group || '',
+      logo: pendingInfo?.logo || '',
+      url: channelUrl,
+    });
+    pendingInfo = null;
+  });
+
+  return channels;
+}
+
+function parseExtInf(line) {
+  const commaIndex = line.indexOf(',');
+  const attributesText = commaIndex === -1 ? line : line.slice(0, commaIndex);
+  const displayName = commaIndex === -1 ? '' : readableText(line.slice(commaIndex + 1));
+  const attributes = parseM3uAttributes(attributesText);
+
+  return {
+    name: displayName || attributes['tvg-name'] || attributes.name || '',
+    group: attributes['group-title'] || '',
+    logo: attributes['tvg-logo'] || '',
+  };
+}
+
+function parseM3uAttributes(text) {
+  const attributes = {};
+  const pattern = /([a-zA-Z0-9_-]+)="([^"]*)"/g;
+  let match = pattern.exec(text);
+
+  while (match) {
+    attributes[match[1].toLowerCase()] = readableText(match[2]);
+    match = pattern.exec(text);
+  }
+
+  return attributes;
+}
+
+function resolvePlaylistUrl(value, sourceUrl) {
+  const cleanValue = readableText(value);
+
+  if (isValidHttpUrl(cleanValue)) {
+    return cleanValue;
+  }
+
+  if (!sourceUrl || !isValidHttpUrl(sourceUrl)) {
+    return cleanValue;
+  }
+
+  try {
+    return new URL(cleanValue, sourceUrl).toString();
+  } catch {
+    return cleanValue;
+  }
 }
 
 function classifySourceUrl(value) {
@@ -280,5 +362,6 @@ module.exports = {
   isValidHttpUrl,
   normalizeDetailResponse,
   normalizeSearchResponse,
+  parseM3uPlaylist,
   parseTvBoxConfig,
 };

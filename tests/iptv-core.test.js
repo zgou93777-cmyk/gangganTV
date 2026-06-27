@@ -10,6 +10,7 @@ const {
   isValidHttpUrl,
   normalizeDetailResponse,
   normalizeSearchResponse,
+  parseM3uPlaylist,
   parseTvBoxConfig,
 } = require('../src/iptv-core');
 
@@ -24,10 +25,48 @@ test('validates only http and https urls after trimming whitespace', () => {
 test('flags m3u channel lists as not directly playable video urls', () => {
   assert.equal(
     getPlayableUrlIssue('https://iptv.example.com/list/Gather.m3u'),
-    '这是频道列表地址，不是单个视频流。请先从列表里选择具体频道的 m3u8/mp4 地址。'
+    '这是频道列表地址，不是单个视频流。请在直播列表里导入后选择频道播放。'
   );
   assert.equal(getPlayableUrlIssue('https://media.example.com/live.m3u8'), '');
   assert.equal(getPlayableUrlIssue('https://media.example.com/movie.mp4'), '');
+});
+
+test('parses m3u playlists into live channels with metadata', () => {
+  const channels = parseM3uPlaylist(`#EXTM3U
+#EXTINF:-1 tvg-id="cctv1" tvg-name="CCTV-1" group-title="央视" tvg-logo="https://logo.example.com/cctv1.png",CCTV-1 综合
+https://stream.example.com/cctv1.m3u8
+#EXTINF:-1 group-title="卫视",湖南卫视
+https://stream.example.com/hunan.m3u8
+`);
+
+  assert.deepEqual(channels, [
+    {
+      id: 'channel-1',
+      name: 'CCTV-1 综合',
+      group: '央视',
+      logo: 'https://logo.example.com/cctv1.png',
+      url: 'https://stream.example.com/cctv1.m3u8',
+    },
+    {
+      id: 'channel-2',
+      name: '湖南卫视',
+      group: '卫视',
+      logo: '',
+      url: 'https://stream.example.com/hunan.m3u8',
+    },
+  ]);
+});
+
+test('resolves relative m3u channel urls against the playlist url', () => {
+  const channels = parseM3uPlaylist(
+    `#EXTM3U
+#EXTINF:-1,Test Channel
+streams/test.m3u8
+`,
+    'https://iptv.example.com/lists/main.m3u'
+  );
+
+  assert.equal(channels[0].url, 'https://iptv.example.com/lists/streams/test.m3u8');
 });
 
 test('classifies CatVod script urls as unsupported plugin sources', () => {

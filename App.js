@@ -20,6 +20,7 @@ const {
   isValidHttpUrl,
 } = require('./src/iptv-core');
 const {
+  fetchM3uPlaylist,
   fetchTvBoxConfig,
   fetchTvBoxDetail,
   fetchTvBoxSearch,
@@ -28,9 +29,12 @@ const {
 } = require('./src/iptv-api');
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
+const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
 
 const STORAGE_KEYS = {
   live: 'iptv.prototype.recentLiveUrl',
+  livePlaylistUrl: 'iptv.prototype.livePlaylistUrl',
+  liveChannels: 'iptv.prototype.liveChannels',
   vod: 'iptv.prototype.recentVodUrl',
   configUrl: 'iptv.prototype.configUrl',
   configSources: 'iptv.prototype.configSources',
@@ -46,6 +50,8 @@ const LABELS = {
 
 export default function App() {
   const [liveUrl, setLiveUrl] = useState('');
+  const [livePlaylistUrl, setLivePlaylistUrl] = useState('');
+  const [liveChannels, setLiveChannels] = useState([]);
   const [vodUrl, setVodUrl] = useState('');
   const [configUrl, setConfigUrl] = useState('');
   const [configSources, setConfigSources] = useState([]);
@@ -59,6 +65,7 @@ export default function App() {
   const [currentUrl, setCurrentUrl] = useState('');
   const [message, setMessage] = useState('等待播放地址');
   const [loadingConfig, setLoadingConfig] = useState(false);
+  const [loadingLivePlaylist, setLoadingLivePlaylist] = useState(false);
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [loadingDetailId, setLoadingDetailId] = useState('');
   const [loadingEpisodeKey, setLoadingEpisodeKey] = useState('');
@@ -108,6 +115,8 @@ export default function App() {
   async function restoreLocalState() {
     const [
       storedLiveUrl,
+      storedLivePlaylistUrl,
+      storedLiveChannels,
       storedVodUrl,
       storedConfigUrl,
       storedSources,
@@ -115,6 +124,8 @@ export default function App() {
       storedSelectedSiteId,
     ] = await Promise.all([
       AsyncStorage.getItem(STORAGE_KEYS.live),
+      AsyncStorage.getItem(STORAGE_KEYS.livePlaylistUrl),
+      AsyncStorage.getItem(STORAGE_KEYS.liveChannels),
       AsyncStorage.getItem(STORAGE_KEYS.vod),
       AsyncStorage.getItem(STORAGE_KEYS.configUrl),
       AsyncStorage.getItem(STORAGE_KEYS.configSources),
@@ -124,8 +135,11 @@ export default function App() {
 
     const nextSources = parseStoredArray(storedSources);
     const nextSites = parseStoredArray(storedSites);
+    const nextLiveChannels = parseStoredArray(storedLiveChannels);
 
     setLiveUrl(storedLiveUrl || '');
+    setLivePlaylistUrl(storedLivePlaylistUrl || '');
+    setLiveChannels(nextLiveChannels);
     setVodUrl(storedVodUrl || '');
     setConfigUrl(storedConfigUrl || '');
     setConfigSources(nextSources);
@@ -191,6 +205,65 @@ export default function App() {
     } else {
       player.play();
     }
+  }
+
+  async function importLivePlaylist() {
+    await importLivePlaylistFromUrl(livePlaylistUrl);
+  }
+
+  async function importBuiltInLivePlaylist() {
+    setLivePlaylistUrl(BUILT_IN_TEST_LIVE_PLAYLIST_URL);
+    await importLivePlaylistFromUrl(BUILT_IN_TEST_LIVE_PLAYLIST_URL);
+  }
+
+  async function importLivePlaylistFromUrl(url) {
+    const cleanUrl = url.trim();
+
+    if (!cleanUrl) {
+      setActiveType('live');
+      setMessage('请输入直播列表地址');
+      return;
+    }
+
+    if (
+      cleanUrl !== BUILT_IN_TEST_LIVE_PLAYLIST_URL &&
+      !isValidHttpUrl(cleanUrl)
+    ) {
+      setActiveType('live');
+      setMessage('直播列表地址需要以 http:// 或 https:// 开头');
+      return;
+    }
+
+    setLoadingLivePlaylist(true);
+    setActiveType('live');
+    setMessage('正在导入直播列表');
+
+    try {
+      const channels = await fetchM3uPlaylist(cleanUrl);
+
+      setLiveChannels(channels);
+      await Promise.all([
+        AsyncStorage.setItem(STORAGE_KEYS.livePlaylistUrl, cleanUrl),
+        saveJson(STORAGE_KEYS.liveChannels, channels),
+      ]);
+      setMessage(`已导入 ${channels.length} 个直播频道`);
+    } catch (playlistError) {
+      setLiveChannels([]);
+      setMessage(playlistError?.message || '直播列表导入失败');
+    } finally {
+      setLoadingLivePlaylist(false);
+    }
+  }
+
+  async function playLiveChannel(channel) {
+    if (!channel?.url) {
+      setMessage('该频道没有可播放地址');
+      return;
+    }
+
+    setLiveUrl(channel.url);
+    await AsyncStorage.setItem(STORAGE_KEYS.live, channel.url);
+    await playResolvedUrl('live', channel.url, channel.name);
   }
 
   async function importConfigSource() {
@@ -467,6 +540,75 @@ export default function App() {
                 {isPlaying ? '暂停' : '继续播放'}
               </Text>
             </Pressable>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>直播列表</Text>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              onChangeText={setLivePlaylistUrl}
+              placeholder="https://example.com/live.m3u"
+              placeholderTextColor="#76716b"
+              style={styles.input}
+              value={livePlaylistUrl}
+            />
+            <Pressable
+              accessibilityRole="button"
+              disabled={loadingLivePlaylist}
+              onPress={importLivePlaylist}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                (pressed || loadingLivePlaylist) && styles.buttonPressed,
+              ]}
+            >
+              <Text style={styles.primaryButtonText}>
+                {loadingLivePlaylist ? '导入中' : '导入直播列表'}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              disabled={loadingLivePlaylist}
+              onPress={() =>
+                importBuiltInLivePlaylist().catch(() =>
+                  setMessage('测试直播列表导入失败')
+                )
+              }
+              style={({ pressed }) => [
+                styles.outlineButton,
+                (pressed || loadingLivePlaylist) && styles.buttonPressed,
+              ]}
+            >
+              <Text style={styles.outlineButtonText}>使用测试直播列表</Text>
+            </Pressable>
+            {liveChannels.length ? (
+              <View style={styles.siteList}>
+                {liveChannels.map((channel) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={channel.id}
+                    onPress={() =>
+                      playLiveChannel(channel).catch(() =>
+                        setMessage('频道加载失败')
+                      )
+                    }
+                    style={({ pressed }) => [
+                      styles.siteRow,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <View style={styles.siteMain}>
+                      <Text style={styles.siteName}>{channel.name}</Text>
+                      <Text numberOfLines={1} selectable style={styles.siteMeta}>
+                        {channel.group || '未分组'} · {channel.url}
+                      </Text>
+                    </View>
+                    <Text style={styles.resultAction}>播放</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.section}>

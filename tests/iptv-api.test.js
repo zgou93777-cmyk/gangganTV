@@ -5,7 +5,9 @@ const {
   fetchTvBoxConfig,
   fetchTvBoxDetail,
   fetchTvBoxSearch,
+  fetchM3uPlaylist,
   isBuiltInMockConfigUrl,
+  isBuiltInMockLivePlaylistUrl,
   resolveTvBoxEpisode,
 } = require('../src/iptv-api');
 
@@ -154,6 +156,75 @@ test('network helpers include HTTP status in failures', async () => {
       ),
     /请求失败：HTTP 500/
   );
+});
+
+test('fetchM3uPlaylist loads text playlists and returns parsed channels', async () => {
+  const calls = [];
+  const channels = await fetchM3uPlaylist(
+    'https://iptv.example.com/live/list.m3u',
+    async (url, options) => {
+      calls.push({ url, accept: options.headers.Accept });
+      return {
+        ok: true,
+        status: 200,
+        text: async () => `#EXTM3U
+#EXTINF:-1 group-title="测试",测试频道
+test.m3u8
+`,
+      };
+    }
+  );
+
+  assert.deepEqual(calls, [
+    {
+      url: 'https://iptv.example.com/live/list.m3u',
+      accept: 'application/vnd.apple.mpegurl, audio/mpegurl, text/plain;q=0.9, */*;q=0.8',
+    },
+  ]);
+  assert.deepEqual(channels, [
+    {
+      id: 'channel-1',
+      name: '测试频道',
+      group: '测试',
+      logo: '',
+      url: 'https://iptv.example.com/live/test.m3u8',
+    },
+  ]);
+});
+
+test('fetchM3uPlaylist rejects empty playlists with a clear message', async () => {
+  await assert.rejects(
+    () =>
+      fetchM3uPlaylist('https://iptv.example.com/empty.m3u', async () => ({
+        ok: true,
+        status: 200,
+        text: async () => '#EXTM3U\n',
+      })),
+    /直播列表里没有可播放频道/
+  );
+});
+
+test('built-in mock live playlist returns one playable channel without network', async () => {
+  let called = false;
+  const fetchImpl = async () => {
+    called = true;
+    return jsonResponse({});
+  };
+
+  assert.equal(isBuiltInMockLivePlaylistUrl('mock://demo-live-m3u'), true);
+
+  const channels = await fetchM3uPlaylist('mock://demo-live-m3u', fetchImpl);
+
+  assert.deepEqual(channels, [
+    {
+      id: 'channel-1',
+      name: 'Apple HLS Test Channel',
+      group: 'Test',
+      logo: '',
+      url: 'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8',
+    },
+  ]);
+  assert.equal(called, false);
 });
 
 test('built-in mock source supports config, search, detail, and direct HLS playback', async () => {
