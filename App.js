@@ -38,6 +38,7 @@ const {
   addPlayHistoryItem,
   normalizePlayHistory,
 } = require('./src/play-history');
+const { testTvBoxSite } = require('./src/site-tester');
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
@@ -83,6 +84,8 @@ export default function App() {
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [loadingDetailId, setLoadingDetailId] = useState('');
   const [loadingEpisodeKey, setLoadingEpisodeKey] = useState('');
+  const [testingSite, setTestingSite] = useState(false);
+  const [siteTestResult, setSiteTestResult] = useState(null);
 
   const player = useVideoPlayer(null, (videoPlayer) => {
     videoPlayer.loop = false;
@@ -444,6 +447,7 @@ export default function App() {
     setSelectedResult(null);
     setSelectedDetail(null);
     setSearchResults([]);
+    setSiteTestResult(null);
     await AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, site.id);
 
     if (site.unsupportedReason) {
@@ -453,6 +457,27 @@ export default function App() {
     } else {
       setMessage(`已选择 ${site.name}`);
       setActiveTab('discover');
+    }
+  }
+
+  async function testSelectedSite() {
+    if (!selectedSite) {
+      setMessage('请先选择一个站点');
+      setSiteTestResult(null);
+      return;
+    }
+
+    setTestingSite(true);
+    setSiteTestResult(null);
+    setMessage(`正在测试 ${selectedSite.name}`);
+
+    try {
+      const result = await testTvBoxSite(selectedSite);
+
+      setSiteTestResult(result);
+      setMessage(result.message);
+    } finally {
+      setTestingSite(false);
     }
   }
 
@@ -998,6 +1023,22 @@ export default function App() {
             <Text style={styles.sectionTitle}>站点</Text>
             <Text style={styles.sectionHint}>选择一个可搜索站点后回到发现页搜索</Text>
           </View>
+          <View style={styles.selectedSitePanel}>
+            <Text style={styles.statusLabel}>当前站点</Text>
+            <Text style={styles.selectedSiteText}>
+              {selectedSite ? selectedSite.name : '未选择'}
+            </Text>
+          </View>
+          <CompactButton
+            disabled={!selectedSite || testingSite}
+            onPress={() =>
+              testSelectedSite().catch(() => setMessage('站点测试失败'))
+            }
+            variant="accent"
+          >
+            {testingSite ? '测试中' : '测试当前站点'}
+          </CompactButton>
+          {siteTestResult ? <SiteTestResultPanel result={siteTestResult} /> : null}
           {renderSiteList()}
         </View>
 
@@ -1260,6 +1301,35 @@ function ConfigDiagnosticsPanel({ diagnostics }) {
         <DiagnosticTile label="未声明" value={diagnostics.nonSearchableSites} />
         <DiagnosticTile label="插件/不兼容" value={diagnostics.unsupportedSites} />
       </View>
+    </View>
+  );
+}
+
+function SiteTestResultPanel({ result }) {
+  return (
+    <View
+      style={[
+        styles.siteTestPanel,
+        result.ok ? styles.siteTestPanelPassed : styles.siteTestPanelFailed,
+      ]}
+    >
+      <Text style={styles.siteTestTitle}>
+        {result.ok ? '测试通过' : '测试未通过'}
+      </Text>
+      <Text selectable style={styles.siteTestMessage}>
+        {result.message}
+      </Text>
+      <View style={styles.siteTestGrid}>
+        <DiagnosticTile label="关键词" value={result.keyword || '-'} />
+        <DiagnosticTile label="线路" value={result.playGroupCount} />
+        <DiagnosticTile label="剧集" value={result.episodeCount} />
+        <DiagnosticTile label="状态" value={result.status} />
+      </View>
+      {result.resultName ? (
+        <Text selectable style={styles.siteTestMessage}>
+          样例结果：{result.resultName}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -1827,7 +1897,7 @@ const styles = StyleSheet.create({
   },
   diagnosticValue: {
     color: '#1d4ed8',
-    fontSize: 18,
+    fontSize: 16,
     fontVariant: ['tabular-nums'],
     fontWeight: '900',
     letterSpacing: 0,
@@ -1837,6 +1907,37 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0,
+  },
+  siteTestPanel: {
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 9,
+    padding: 12,
+  },
+  siteTestPanelPassed: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#a7f3d0',
+  },
+  siteTestPanelFailed: {
+    backgroundColor: '#fff7ed',
+    borderColor: '#fed7aa',
+  },
+  siteTestTitle: {
+    color: '#111827',
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  siteTestMessage: {
+    color: '#475467',
+    fontSize: 12,
+    letterSpacing: 0,
+    lineHeight: 18,
+  },
+  siteTestGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   sourceList: {
     gap: 8,
