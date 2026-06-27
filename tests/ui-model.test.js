@@ -5,6 +5,7 @@ const {
   APP_TABS,
   DEFAULT_TAB_ID,
   buildLiveChannelGroups,
+  buildVodResultCards,
   buildWatchingSummary,
   filterLiveChannels,
   getTabById,
@@ -101,4 +102,48 @@ test('filters live channels by keyword and group', () => {
     ),
     ['movie']
   );
+});
+
+test('builds safe VOD result cards for poster grid rendering', () => {
+  const cards = buildVodResultCards([
+    {
+      id: 'movie-1',
+      name: '三体',
+      poster: 'https://img.example.com/three-body.jpg',
+      remarks: '更新至 8',
+    },
+    {
+      id: '',
+      name: '',
+      poster: '',
+      remarks: '',
+    },
+  ]);
+
+  assert.deepEqual(cards, [
+    {
+      id: 'movie-1',
+      title: '三体',
+      poster: 'https://img.example.com/three-body.jpg',
+      badge: '更新至 8',
+      raw: {
+        id: 'movie-1',
+        name: '三体',
+        poster: 'https://img.example.com/three-body.jpg',
+        remarks: '更新至 8',
+      },
+    },
+    {
+      id: 'vod-card-2',
+      title: '未命名',
+      poster: '',
+      badge: '',
+      raw: {
+        id: '',
+        name: '',
+        poster: '',
+        remarks: '',
+      },
+    },
+  ]);
 });

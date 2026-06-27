@@ -89,15 +89,34 @@ function filterLiveChannels(channels = [], { keyword = '', group = 'all' } = {})
   });
 }
 
+function buildVodResultCards(results = []) {
+  return results.map((result, index) => ({
+    id: readableText(result?.id) || `vod-card-${index + 1}`,
+    title: readableText(result?.name) || '未命名',
+    poster: readableText(result?.poster),
+    badge: readableText(result?.remarks),
+    raw: result,
+  }));
+}
+
 function normalizeLiveGroup(group) {
   const cleanGroup = typeof group === 'string' ? group.trim() : '';
   return cleanGroup || '未分组';
+}
+
+function readableText(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  return String(value).trim();
 }
 
 module.exports = {
   APP_TABS,
   DEFAULT_TAB_ID,
   buildLiveChannelGroups,
+  buildVodResultCards,
   buildWatchingSummary,
   filterLiveChannels,
   getTabById,

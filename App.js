@@ -5,6 +5,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEffect, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
+  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -32,6 +33,7 @@ const {
   APP_TABS,
   DEFAULT_TAB_ID,
   buildLiveChannelGroups,
+  buildVodResultCards,
   buildWatchingSummary,
   filterLiveChannels,
   getTabById,
@@ -140,6 +142,10 @@ export default function App() {
         group: selectedLiveGroup,
       }),
     [liveChannelKeyword, liveChannels, selectedLiveGroup]
+  );
+  const vodResultCards = useMemo(
+    () => buildVodResultCards(searchResults),
+    [searchResults]
   );
   const watchingSummary = useMemo(
     () =>
@@ -886,26 +892,40 @@ export default function App() {
         </CompactButton>
 
         {searchResults.length ? (
-          <View style={styles.listStack}>
-            {searchResults.map((result) => (
+          <View style={styles.vodGrid}>
+            {vodResultCards.map((card) => (
               <Pressable
                 accessibilityRole="button"
-                key={result.id}
-                onPress={() => loadDetail(result)}
+                key={card.id}
+                onPress={() => loadDetail(card.raw)}
                 style={({ pressed }) => [
-                  styles.resultRow,
-                  selectedResult?.id === result.id && styles.resultRowActive,
+                  styles.vodCard,
+                  selectedResult?.id === card.raw.id && styles.vodCardActive,
                   pressed && styles.buttonPressed,
                 ]}
               >
-                <View style={styles.rowMain}>
-                  <Text style={styles.rowTitle}>{result.name}</Text>
-                  {result.remarks ? (
-                    <Text style={styles.rowMeta}>{result.remarks}</Text>
+                <View style={styles.posterFrame}>
+                  {card.poster ? (
+                    <Image
+                      resizeMode="cover"
+                      source={{ uri: card.poster }}
+                      style={styles.posterImage}
+                    />
+                  ) : (
+                    <View style={styles.posterPlaceholder}>
+                      <Text style={styles.posterPlaceholderText}>
+                        {card.title.slice(0, 1)}
+                      </Text>
+                    </View>
+                  )}
+                  {card.badge ? (
+                    <Text numberOfLines={1} style={styles.posterBadge}>
+                      {card.badge}
+                    </Text>
                   ) : null}
                 </View>
-                <Text style={styles.rowAction}>
-                  {loadingDetailId === result.id ? '读取中' : '列表'}
+                <Text numberOfLines={2} style={styles.vodCardTitle}>
+                  {loadingDetailId === card.raw.id ? '读取中...' : card.title}
                 </Text>
               </Pressable>
             ))}
@@ -914,6 +934,12 @@ export default function App() {
 
         {selectedDetail?.playGroups?.length ? (
           <View style={styles.playGroupList}>
+            <View style={styles.selectedDetailPanel}>
+              <Text style={styles.selectedSiteText}>{selectedDetail.name}</Text>
+              {selectedDetail.remarks ? (
+                <Text style={styles.rowMeta}>{selectedDetail.remarks}</Text>
+              ) : null}
+            </View>
             {selectedDetail.playGroups.map((group) => (
               <View key={group.name} style={styles.playGroup}>
                 <Text style={styles.playGroupTitle}>{group.name}</Text>
@@ -2314,6 +2340,66 @@ const styles = StyleSheet.create({
   resultRowActive: {
     borderColor: '#1d4ed8',
   },
+  vodGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  vodCard: {
+    gap: 7,
+    width: '48%',
+  },
+  vodCardActive: {
+    opacity: 0.82,
+  },
+  posterFrame: {
+    aspectRatio: 2 / 3,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+    width: '100%',
+  },
+  posterImage: {
+    height: '100%',
+    width: '100%',
+  },
+  posterPlaceholder: {
+    alignItems: 'center',
+    backgroundColor: '#e5e7eb',
+    height: '100%',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  posterPlaceholderText: {
+    color: '#98a2b3',
+    fontSize: 30,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  posterBadge: {
+    backgroundColor: '#f59e0b',
+    borderBottomLeftRadius: 8,
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0,
+    maxWidth: '80%',
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  vodCardTitle: {
+    color: '#111827',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
   rowMain: {
     flex: 1,
     gap: 3,
@@ -2371,6 +2457,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 0,
+  },
+  selectedDetailPanel: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#d7dde6',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 4,
+    padding: 10,
   },
   playGroupList: {
     gap: 12,
