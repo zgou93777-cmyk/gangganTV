@@ -1415,9 +1415,42 @@ export default function App() {
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.header}>
-              <View style={styles.brandRow}>
-                <Text style={styles.brandText}>私人 IPTV</Text>
-                <Text style={styles.buildPill}>iPhone 优先</Text>
+              <View style={styles.topChrome}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setActiveTab('settings')}
+                  style={({ pressed }) => [
+                    styles.sourcePill,
+                    pressed && styles.buttonPressed,
+                  ]}
+                >
+                  <Text style={styles.sourceIcon}>▣</Text>
+                  <Text numberOfLines={1} style={styles.brandText}>
+                    私人 IPTV
+                  </Text>
+                </Pressable>
+                <View style={styles.headerActions}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setActiveTab('settings')}
+                    style={({ pressed }) => [
+                      styles.circleButton,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={styles.circleButtonText}>↗</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setActiveTab('discover')}
+                    style={({ pressed }) => [
+                      styles.circleButton,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={styles.circleButtonText}>⌕</Text>
+                  </Pressable>
+                </View>
               </View>
               <TopTabs
                 activeTab={activeTab}
@@ -1970,7 +2003,7 @@ function formatConfigSourceStatus(status) {
 
 const styles = StyleSheet.create({
   root: {
-    backgroundColor: '#f2f4f7',
+    backgroundColor: '#ffffff',
     flex: 1,
   },
   keyboardRoot: {
@@ -1983,34 +2016,62 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 16,
     paddingBottom: 116,
-    paddingTop: 54,
+    paddingTop: 50,
   },
   header: {
     gap: 14,
   },
-  brandRow: {
+  topChrome: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 12,
+  },
+  sourcePill: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#e5e7eb',
+    borderRadius: 32,
+    borderWidth: 1,
+    boxShadow: '0 8px 22px rgba(17, 24, 39, 0.08)',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 58,
+    paddingHorizontal: 18,
+  },
+  sourceIcon: {
+    color: '#1d4ed8',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 0,
   },
   brandText: {
     color: '#111827',
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '800',
     letterSpacing: 0,
   },
-  buildPill: {
-    backgroundColor: '#e5f6f2',
-    borderColor: '#b9e7dc',
-    borderRadius: 16,
+  headerActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  circleButton: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#e5e7eb',
+    borderRadius: 28,
     borderWidth: 1,
-    color: '#08735d',
-    fontSize: 12,
-    fontWeight: '800',
+    boxShadow: '0 8px 22px rgba(17, 24, 39, 0.08)',
+    height: 58,
+    justifyContent: 'center',
+    width: 58,
+  },
+  circleButtonText: {
+    color: '#111827',
+    fontSize: 26,
+    fontWeight: '900',
     letterSpacing: 0,
-    overflow: 'hidden',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
   },
   topTabs: {
     backgroundColor: '#e8ebef',
@@ -2044,7 +2105,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#111827',
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '900',
     letterSpacing: 0,
   },
@@ -2655,28 +2716,28 @@ const styles = StyleSheet.create({
   },
   bottomTabs: {
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#d7dde6',
-    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
+    borderColor: 'rgba(215, 221, 230, 0.78)',
+    borderRadius: 38,
     borderWidth: 1,
     bottom: 18,
-    boxShadow: '0 8px 24px rgba(17, 24, 39, 0.14)',
+    boxShadow: '0 12px 30px rgba(17, 24, 39, 0.18)',
     flexDirection: 'row',
-    gap: 4,
-    left: 16,
-    padding: 6,
+    gap: 6,
+    left: 42,
+    padding: 8,
     position: 'absolute',
-    right: 16,
+    right: 42,
   },
   bottomTab: {
     alignItems: 'center',
-    borderRadius: 18,
+    borderRadius: 30,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 42,
+    minHeight: 56,
   },
   bottomTabActive: {
-    backgroundColor: '#111827',
+    backgroundColor: 'rgba(29, 78, 216, 0.16)',
   },
   bottomTabText: {
     color: '#667085',
@@ -2685,6 +2746,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   bottomTabTextActive: {
-    color: '#ffffff',
+    color: '#1d4ed8',
   },
 });
