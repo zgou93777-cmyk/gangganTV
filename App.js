@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 
 const {
+  buildConfigDiagnostics,
   classifySourceUrl,
   getPlayableUrlIssue,
   isValidHttpUrl,
@@ -113,6 +114,10 @@ export default function App() {
         currentUrl,
       }),
     [configSources, currentUrl, liveChannels, playHistory, sites]
+  );
+  const configDiagnostics = useMemo(
+    () => buildConfigDiagnostics({ sources: configSources, sites }),
+    [configSources, sites]
   );
 
   useEffect(() => {
@@ -984,6 +989,7 @@ export default function App() {
           <Text style={styles.helperText}>
             测试源只包含公开样片，用来验证搜索、详情和播放流程。插件源会被识别，但当前版本不会执行第三方脚本。
           </Text>
+          <ConfigDiagnosticsPanel diagnostics={configDiagnostics} />
           <SourceList sources={configSources} />
         </View>
 
@@ -1240,6 +1246,29 @@ function SummaryRow({ label, selectable = false, value }) {
       >
         {value}
       </Text>
+    </View>
+  );
+}
+
+function ConfigDiagnosticsPanel({ diagnostics }) {
+  return (
+    <View style={styles.diagnosticsPanel}>
+      <Text style={styles.diagnosticsSummary}>{diagnostics.summary}</Text>
+      <View style={styles.diagnosticsGrid}>
+        <DiagnosticTile label="配置源" value={diagnostics.configSourceCount} />
+        <DiagnosticTile label="可搜索" value={diagnostics.searchableSites} />
+        <DiagnosticTile label="未声明" value={diagnostics.nonSearchableSites} />
+        <DiagnosticTile label="插件/不兼容" value={diagnostics.unsupportedSites} />
+      </View>
+    </View>
+  );
+}
+
+function DiagnosticTile({ label, value }) {
+  return (
+    <View style={styles.diagnosticTile}>
+      <Text style={styles.diagnosticValue}>{value}</Text>
+      <Text style={styles.diagnosticLabel}>{label}</Text>
     </View>
   );
 }
@@ -1764,6 +1793,50 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0,
     lineHeight: 18,
+  },
+  diagnosticsPanel: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#d7dde6',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 10,
+    padding: 12,
+  },
+  diagnosticsSummary: {
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0,
+    lineHeight: 18,
+  },
+  diagnosticsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  diagnosticTile: {
+    backgroundColor: '#ffffff',
+    borderColor: '#e1e6ee',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 2,
+    minHeight: 52,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    width: '48%',
+  },
+  diagnosticValue: {
+    color: '#1d4ed8',
+    fontSize: 18,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  diagnosticLabel: {
+    color: '#667085',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0,
   },
   sourceList: {
     gap: 8,

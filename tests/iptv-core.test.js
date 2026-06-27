@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const {
+  buildConfigDiagnostics,
   buildTvBoxDetailUrl,
   buildTvBoxSearchUrl,
   classifySourceUrl,
@@ -126,6 +127,48 @@ test('parses TVBox config sites and marks searchable plugin sites as unsupported
   assert.equal(parsed.sites[1].unsupportedReason, '插件站点暂不执行第三方脚本');
 });
 
+test('builds a config diagnostic summary for imported sources and sites', () => {
+  const diagnostics = buildConfigDiagnostics({
+    sources: [
+      { id: 'https://config.example.com/tvbox.json', kind: 'config' },
+      { id: 'https://cat.example.com/index.js.md5', kind: 'plugin' },
+    ],
+    sites: [
+      {
+        id: 'api-one',
+        type: 1,
+        searchable: true,
+        unsupportedReason: '',
+      },
+      {
+        id: 'api-two',
+        type: 1,
+        searchable: false,
+        unsupportedReason: '',
+      },
+      {
+        id: 'plugin-one',
+        type: 3,
+        searchable: true,
+        unsupportedReason: '插件站点暂不执行第三方脚本',
+      },
+    ],
+  });
+
+  assert.deepEqual(diagnostics, {
+    sourceCount: 2,
+    configSourceCount: 1,
+    pluginSourceCount: 1,
+    totalSites: 3,
+    searchableSites: 1,
+    nonSearchableSites: 1,
+    pluginSites: 1,
+    unsupportedSites: 1,
+    status: 'ready',
+    summary: '已导入 3 个站点，1 个可搜索，1 个插件/不兼容',
+  });
+});
+
 test('deduplicates repeated TVBox site keys into stable render-safe ids', () => {
   const parsed = parseTvBoxConfig(
     {
@@ -198,6 +241,30 @@ test('normalizes common TVBox search responses', () => {
   ]);
 });
 
+test('normalizes nested OK search response variants', () => {
+  const results = normalizeSearchResponse({
+    data: {
+      vodList: [
+        {
+          vodId: 'movie-2',
+          vodName: 'Nested Movie',
+          cover: 'https://img.example.com/2.jpg',
+          note: 'HD',
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(results, [
+    {
+      id: 'movie-2',
+      name: 'Nested Movie',
+      poster: 'https://img.example.com/2.jpg',
+      remarks: 'HD',
+    },
+  ]);
+});
+
 test('normalizes TVBox detail responses into play groups and episodes', () => {
   const detail = normalizeDetailResponse({
     list: [
@@ -224,6 +291,31 @@ test('normalizes TVBox detail responses into play groups and episodes', () => {
     {
       name: '线路二',
       episodes: [{ name: '备用', url: 'play-token' }],
+    },
+  ]);
+});
+
+test('normalizes nested OK detail response variants', () => {
+  const detail = normalizeDetailResponse({
+    data: {
+      vodId: 'movie-2',
+      vodName: 'Nested Movie',
+      playFrom: 'Line A',
+      playUrl: 'Episode 1$https://media.example.com/nested.m3u8',
+    },
+  });
+
+  assert.equal(detail.id, 'movie-2');
+  assert.equal(detail.name, 'Nested Movie');
+  assert.deepEqual(detail.playGroups, [
+    {
+      name: 'Line A',
+      episodes: [
+        {
+          name: 'Episode 1',
+          url: 'https://media.example.com/nested.m3u8',
+        },
+      ],
     },
   ]);
 });

@@ -174,6 +174,42 @@ function parseTvBoxConfig(config, sourceUrl, importedAt) {
   };
 }
 
+function buildConfigDiagnostics({ sources = [], sites = [] } = {}) {
+  const configSourceCount = sources.filter((source) => source.kind !== 'plugin').length;
+  const pluginSourceCount = sources.filter((source) => source.kind === 'plugin').length;
+  const pluginSites = sites.filter((site) => site.type === 3 || site.unsupportedReason).length;
+  const unsupportedSites = sites.filter((site) => site.unsupportedReason).length;
+  const searchableSites = sites.filter(
+    (site) => site.searchable && !site.unsupportedReason
+  ).length;
+  const nonSearchableSites = sites.filter(
+    (site) => !site.searchable && !site.unsupportedReason
+  ).length;
+  const totalSites = sites.length;
+  const status = totalSites === 0 ? 'empty' : searchableSites > 0 ? 'ready' : 'limited';
+
+  return {
+    sourceCount: sources.length,
+    configSourceCount,
+    pluginSourceCount,
+    totalSites,
+    searchableSites,
+    nonSearchableSites,
+    pluginSites,
+    unsupportedSites,
+    status,
+    summary: buildConfigDiagnosticsSummary(totalSites, searchableSites, pluginSites),
+  };
+}
+
+function buildConfigDiagnosticsSummary(totalSites, searchableSites, pluginSites) {
+  if (totalSites === 0) {
+    return '还没有导入可识别站点';
+  }
+
+  return `已导入 ${totalSites} 个站点，${searchableSites} 个可搜索，${pluginSites} 个插件/不兼容`;
+}
+
 function normalizeSite(site, index) {
   if (!site || typeof site !== 'object') {
     return null;
@@ -229,12 +265,21 @@ function buildTvBoxDetailUrl(site, id) {
 }
 
 function normalizeSearchResponse(response) {
-  const list = Array.isArray(response?.list) ? response.list : [];
+  const list = firstArray([
+    response?.list,
+    response?.data?.list,
+    response?.data?.vodList,
+    response?.data?.videos,
+    response?.result?.list,
+    response?.result?.vodList,
+    response?.videos,
+    response?.vodList,
+  ]);
 
   return list
     .map((item) => {
-      const id = readableText(item?.vod_id ?? item?.id);
-      const name = readableText(item?.vod_name ?? item?.name);
+      const id = readableText(item?.vod_id ?? item?.vodId ?? item?.id);
+      const name = readableText(item?.vod_name ?? item?.vodName ?? item?.name ?? item?.title);
 
       if (!id || !name) {
         return null;
@@ -243,27 +288,38 @@ function normalizeSearchResponse(response) {
       return {
         id,
         name,
-        poster: readableText(item?.vod_pic ?? item?.pic),
-        remarks: readableText(item?.vod_remarks ?? item?.remarks),
+        poster: readableText(item?.vod_pic ?? item?.vodPic ?? item?.pic ?? item?.cover),
+        remarks: readableText(
+          item?.vod_remarks ?? item?.vodRemarks ?? item?.remarks ?? item?.note
+        ),
       };
     })
     .filter(Boolean);
 }
 
 function normalizeDetailResponse(response) {
-  const list = Array.isArray(response?.list) ? response.list : [];
-  const item = list[0];
+  const list = firstArray([
+    response?.list,
+    response?.data?.list,
+    response?.data?.vodList,
+    response?.result?.list,
+    response?.result?.vodList,
+  ]);
+  const item = list[0] || firstObject([response?.data, response?.result, response?.vod]);
 
   if (!item || typeof item !== 'object') {
     throw new Error('没有找到影片详情');
   }
 
   return {
-    id: readableText(item.vod_id ?? item.id),
-    name: readableText(item.vod_name ?? item.name),
-    poster: readableText(item.vod_pic ?? item.pic),
-    remarks: readableText(item.vod_remarks ?? item.remarks),
-    playGroups: parsePlayGroups(item.vod_play_from, item.vod_play_url),
+    id: readableText(item.vod_id ?? item.vodId ?? item.id),
+    name: readableText(item.vod_name ?? item.vodName ?? item.name ?? item.title),
+    poster: readableText(item.vod_pic ?? item.vodPic ?? item.pic ?? item.cover),
+    remarks: readableText(item.vod_remarks ?? item.vodRemarks ?? item.remarks ?? item.note),
+    playGroups: parsePlayGroups(
+      item.vod_play_from ?? item.vodPlayFrom ?? item.playFrom,
+      item.vod_play_url ?? item.vodPlayUrl ?? item.playUrl
+    ),
   };
 }
 
@@ -321,6 +377,16 @@ function extractPlayableUrl(payload) {
   return candidates.find((candidate) => isValidHttpUrl(candidate))?.trim() || '';
 }
 
+function firstArray(values) {
+  return values.find((value) => Array.isArray(value)) || [];
+}
+
+function firstObject(values) {
+  return values.find(
+    (value) => value && typeof value === 'object' && !Array.isArray(value)
+  );
+}
+
 function isTruthyFlag(value) {
   if (value === true) {
     return true;
@@ -354,6 +420,7 @@ function readableText(value) {
 }
 
 module.exports = {
+  buildConfigDiagnostics,
   buildTvBoxDetailUrl,
   buildTvBoxSearchUrl,
   classifySourceUrl,
