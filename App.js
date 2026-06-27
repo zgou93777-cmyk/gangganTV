@@ -86,6 +86,7 @@ export default function App() {
   const [loadingEpisodeKey, setLoadingEpisodeKey] = useState('');
   const [testingSite, setTestingSite] = useState(false);
   const [siteTestResult, setSiteTestResult] = useState(null);
+  const [siteTestKeyword, setSiteTestKeyword] = useState('test');
 
   const player = useVideoPlayer(null, (videoPlayer) => {
     videoPlayer.loop = false;
@@ -472,7 +473,9 @@ export default function App() {
     setMessage(`正在测试 ${selectedSite.name}`);
 
     try {
-      const result = await testTvBoxSite(selectedSite);
+      const result = await testTvBoxSite(selectedSite, {
+        keyword: siteTestKeyword,
+      });
 
       setSiteTestResult(result);
       setMessage(result.message);
@@ -1029,6 +1032,15 @@ export default function App() {
               {selectedSite ? selectedSite.name : '未选择'}
             </Text>
           </View>
+          <TextInput
+            autoCorrect={false}
+            onChangeText={setSiteTestKeyword}
+            placeholder="测试关键词，例如 test"
+            placeholderTextColor="#8d96a0"
+            returnKeyType="done"
+            style={styles.input}
+            value={siteTestKeyword}
+          />
           <CompactButton
             disabled={!selectedSite || testingSite}
             onPress={() =>
