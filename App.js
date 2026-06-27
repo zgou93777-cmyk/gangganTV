@@ -45,6 +45,9 @@ const {
 const {
   scanLiveSourceText,
 } = require('./src/live-source-scanner');
+const {
+  scanConfigSourceText,
+} = require('./src/config-source-scanner');
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
@@ -76,6 +79,8 @@ export default function App() {
   const [liveSourceScanResults, setLiveSourceScanResults] = useState([]);
   const [vodUrl, setVodUrl] = useState('');
   const [configUrl, setConfigUrl] = useState('');
+  const [configSourceText, setConfigSourceText] = useState('');
+  const [configSourceScanResults, setConfigSourceScanResults] = useState([]);
   const [configSources, setConfigSources] = useState([]);
   const [sites, setSites] = useState([]);
   const [selectedSiteId, setSelectedSiteId] = useState('');
@@ -88,6 +93,7 @@ export default function App() {
   const [playHistory, setPlayHistory] = useState([]);
   const [message, setMessage] = useState('等待播放地址');
   const [loadingConfig, setLoadingConfig] = useState(false);
+  const [scanningConfigSources, setScanningConfigSources] = useState(false);
   const [loadingLivePlaylist, setLoadingLivePlaylist] = useState(false);
   const [scanningLiveSources, setScanningLiveSources] = useState(false);
   const [loadingSearch, setLoadingSearch] = useState(false);
@@ -398,6 +404,38 @@ export default function App() {
   async function importBuiltInTestSource() {
     setConfigUrl(BUILT_IN_TEST_CONFIG_URL);
     await importConfigFromUrl(BUILT_IN_TEST_CONFIG_URL);
+  }
+
+  async function scanPastedConfigSources() {
+    const cleanText = configSourceText.trim();
+
+    if (!cleanText) {
+      setActiveType('config');
+      setConfigSourceScanResults([]);
+      setMessage('请先粘贴配置接口说明或链接');
+      return;
+    }
+
+    setScanningConfigSources(true);
+    setActiveType('config');
+    setMessage('正在检测配置接口链接');
+
+    try {
+      const results = await scanConfigSourceText(cleanText);
+      const readyCount = results.filter((result) => result.ok).length;
+
+      setConfigSourceScanResults(results);
+      setMessage(
+        results.length
+          ? `已检测 ${results.length} 个配置链接，${readyCount} 个可导入`
+          : '没有识别到配置接口链接'
+      );
+    } catch (scanError) {
+      setConfigSourceScanResults([]);
+      setMessage(scanError?.message || '配置接口检测失败');
+    } finally {
+      setScanningConfigSources(false);
+    }
   }
 
   async function importConfigFromUrl(url) {
@@ -1133,6 +1171,50 @@ export default function App() {
           <Text style={styles.helperText}>
             测试源只包含公开样片，用来验证搜索、详情和播放流程。插件源会被识别，但当前版本不会执行第三方脚本。
           </Text>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            multiline
+            onChangeText={setConfigSourceText}
+            placeholder="也可以粘贴整段 OK影视/TVBox/魔力云播接口说明"
+            placeholderTextColor="#8d96a0"
+            style={[styles.input, styles.multilineInput]}
+            textAlignVertical="top"
+            value={configSourceText}
+          />
+          <View style={styles.buttonRow}>
+            <CompactButton
+              disabled={scanningConfigSources}
+              onPress={() =>
+                scanPastedConfigSources().catch(() =>
+                  setMessage('配置接口检测失败')
+                )
+              }
+              variant="primary"
+            >
+              {scanningConfigSources ? '检测中' : '检测配置接口'}
+            </CompactButton>
+            <CompactButton
+              disabled={scanningConfigSources}
+              onPress={() => {
+                setConfigSourceText('');
+                setConfigSourceScanResults([]);
+                setMessage('已清空配置接口检测内容');
+              }}
+              variant="plain"
+            >
+              清空
+            </CompactButton>
+          </View>
+          {configSourceScanResults.length ? (
+            <ConfigSourceScanResultPanel
+              onImport={(url) => {
+                setConfigUrl(url);
+                importConfigFromUrl(url).catch(() => setMessage('配置导入失败'));
+              }}
+              results={configSourceScanResults}
+            />
+          ) : null}
           <ConfigDiagnosticsPanel diagnostics={configDiagnostics} />
           <SourceList sources={configSources} />
         </View>
@@ -1560,6 +1642,58 @@ function LiveSourceScanResultPanel({ onImport, results }) {
   );
 }
 
+function ConfigSourceScanResultPanel({ onImport, results }) {
+  const readyCount = results.filter((result) => result.ok).length;
+
+  return (
+    <View style={styles.siteTestPanel}>
+      <Text style={styles.siteTestTitle}>
+        配置检测：{readyCount} 可导入 / {results.length} 已识别
+      </Text>
+      <View style={styles.listStack}>
+        {results.map((result) => (
+          <View
+            key={`${result.input}-${result.status}`}
+            style={[
+              styles.batchResultRow,
+              result.ok ? styles.batchResultPassed : styles.batchResultFailed,
+            ]}
+          >
+            <View style={styles.rowMain}>
+              <Text style={styles.rowTitle}>{formatConfigSourceKind(result.kind)}</Text>
+              <Text numberOfLines={2} selectable style={styles.rowMeta}>
+                {result.url || result.input}
+              </Text>
+              <Text selectable style={styles.siteTestMessage}>
+                {result.message}
+                {result.ok
+                  ? ` 可搜索 ${result.searchableCount}，插件/不兼容 ${result.pluginCount}`
+                  : ''}
+              </Text>
+            </View>
+            {result.ok ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => onImport(result.url)}
+                style={({ pressed }) => [
+                  styles.inlineActionButton,
+                  pressed && styles.buttonPressed,
+                ]}
+              >
+                <Text style={styles.inlineActionText}>导入</Text>
+              </Pressable>
+            ) : (
+              <Text style={[styles.badge, styles.badgeMuted]}>
+                {formatConfigSourceStatus(result.status)}
+              </Text>
+            )}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function DiagnosticTile({ label, value }) {
   return (
     <View style={styles.diagnosticTile}>
@@ -1681,6 +1815,42 @@ function formatLiveSourceStatus(status) {
 
   if (status === 'empty-playlist') {
     return '空列表';
+  }
+
+  return '不可用';
+}
+
+function formatConfigSourceKind(kind) {
+  if (kind === 'config') {
+    return 'TVBox/OK 配置';
+  }
+
+  if (kind === 'plugin') {
+    return '插件源';
+  }
+
+  if (kind === 'invalid') {
+    return '格式错误';
+  }
+
+  return '未知配置';
+}
+
+function formatConfigSourceStatus(status) {
+  if (status === 'plugin-source') {
+    return '插件';
+  }
+
+  if (status === 'invalid-url') {
+    return '格式';
+  }
+
+  if (status === 'network-error') {
+    return '网络';
+  }
+
+  if (status === 'invalid-config') {
+    return '无效';
   }
 
   return '不可用';
