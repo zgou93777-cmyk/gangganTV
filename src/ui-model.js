@@ -5,16 +5,38 @@ const APP_TABS = [
     id: 'discover',
     label: '发现',
     description: '播放、直播列表和搜索入口',
+    symbol: '▶',
   },
   {
     id: 'watching',
     label: '追剧',
     description: '最近播放和本机保存状态',
+    symbol: '♥',
   },
   {
     id: 'settings',
     label: '设置',
     description: '配置接口、站点和隐私说明',
+    symbol: '⚙',
+  },
+];
+
+const DISCOVER_MODES = [
+  {
+    id: 'all',
+    label: '热门内容',
+  },
+  {
+    id: 'live',
+    label: '直播频道',
+  },
+  {
+    id: 'vod',
+    label: '点播搜索',
+  },
+  {
+    id: 'direct',
+    label: '直链播放',
   },
 ];
 
@@ -115,6 +137,7 @@ function readableText(value) {
 module.exports = {
   APP_TABS,
   DEFAULT_TAB_ID,
+  DISCOVER_MODES,
   buildLiveChannelGroups,
   buildVodResultCards,
   buildWatchingSummary,

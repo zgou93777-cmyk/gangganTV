@@ -32,6 +32,7 @@ const {
 const {
   APP_TABS,
   DEFAULT_TAB_ID,
+  DISCOVER_MODES,
   buildLiveChannelGroups,
   buildVodResultCards,
   buildWatchingSummary,
@@ -76,6 +77,7 @@ const LABELS = {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState(DEFAULT_TAB_ID);
+  const [activeDiscoverMode, setActiveDiscoverMode] = useState('all');
   const [liveUrl, setLiveUrl] = useState('');
   const [livePlaylistUrl, setLivePlaylistUrl] = useState('');
   const [liveChannels, setLiveChannels] = useState([]);
@@ -855,6 +857,43 @@ export default function App() {
           <Text style={styles.sectionHint}>从已导入站点获取播放项</Text>
         </View>
 
+        {sites.length ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.siteRailScroller}
+          >
+            <View style={styles.siteRail}>
+              {sites.slice(0, 24).map((site) => {
+                const isActive = selectedSiteId === site.id;
+
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={site.id}
+                    onPress={() => selectSite(site)}
+                    style={({ pressed }) => [
+                      styles.siteChip,
+                      isActive && styles.siteChipActive,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.siteChipText,
+                        isActive && styles.siteChipTextActive,
+                      ]}
+                    >
+                      {site.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
+        ) : null}
+
         <View style={styles.selectedSitePanel}>
           <Text style={styles.statusLabel}>当前站点</Text>
           <Text style={styles.selectedSiteText}>
@@ -972,14 +1011,131 @@ export default function App() {
     );
   }
 
+  function renderDiscoverModeRail() {
+    return (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.discoverModeScroller}
+      >
+        <View style={styles.discoverModeRow}>
+          {DISCOVER_MODES.map((mode) => {
+            const isActive = activeDiscoverMode === mode.id;
+
+            return (
+              <Pressable
+                accessibilityRole="button"
+                key={mode.id}
+                onPress={() => setActiveDiscoverMode(mode.id)}
+                style={({ pressed }) => [
+                  styles.discoverModeButton,
+                  isActive && styles.discoverModeButtonActive,
+                  pressed && styles.buttonPressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.discoverModeText,
+                    isActive && styles.discoverModeTextActive,
+                  ]}
+                >
+                  {mode.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </ScrollView>
+    );
+  }
+
+  function renderDirectPanel() {
+    return (
+      <View style={styles.panel}>
+        <View style={styles.panelHeader}>
+          <Text style={styles.sectionTitle}>直链播放</Text>
+          <Text style={styles.sectionHint}>直播或点播的最终可播放地址</Text>
+        </View>
+        <UrlInput
+          buttonLabel="播放直播"
+          label="直播地址"
+          onChangeText={setLiveUrl}
+          onPress={() =>
+            playDirectUrl('live').catch(() => setMessage('直播加载失败'))
+          }
+          placeholder="https://example.com/live.m3u8"
+          value={liveUrl}
+          variant="primary"
+        />
+        <UrlInput
+          buttonLabel="播放点播"
+          label="点播地址"
+          onChangeText={setVodUrl}
+          onPress={() =>
+            playDirectUrl('vod').catch(() => setMessage('点播加载失败'))
+          }
+          placeholder="https://example.com/movie.mp4"
+          value={vodUrl}
+          variant="secondary"
+        />
+      </View>
+    );
+  }
+
+  function renderLivePanel() {
+    return (
+      <View style={styles.panel}>
+        <View style={styles.panelHeader}>
+          <Text style={styles.sectionTitle}>直播列表</Text>
+          <Text style={styles.sectionHint}>导入 m3u 后选择频道播放</Text>
+        </View>
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          onChangeText={setLivePlaylistUrl}
+          placeholder="https://example.com/live.m3u"
+          placeholderTextColor="#8d96a0"
+          style={styles.input}
+          value={livePlaylistUrl}
+        />
+        <View style={styles.buttonRow}>
+          <CompactButton
+            disabled={loadingLivePlaylist}
+            onPress={importLivePlaylist}
+            variant="primary"
+          >
+            {loadingLivePlaylist ? '导入中' : '导入列表'}
+          </CompactButton>
+          <CompactButton
+            disabled={loadingLivePlaylist}
+            onPress={() =>
+              importBuiltInLivePlaylist().catch(() =>
+                setMessage('测试直播列表导入失败')
+              )
+            }
+            variant="plain"
+          >
+            测试列表
+          </CompactButton>
+        </View>
+        {renderLiveChannelFilters()}
+        {renderLiveChannelList()}
+      </View>
+    );
+  }
+
   function renderDiscover() {
+    const showDirect =
+      activeDiscoverMode === 'direct';
+    const showLive =
+      activeDiscoverMode === 'live';
+    const showVod =
+      activeDiscoverMode === 'all' || activeDiscoverMode === 'vod';
+
     return (
       <View style={styles.tabContent}>
-        <View style={styles.statsGrid}>
-          <StatTile label="直播频道" value={watchingSummary.liveChannelCount} />
-          <StatTile label="配置源" value={watchingSummary.configSourceCount} />
-          <StatTile label="最近播放" value={watchingSummary.playHistoryCount} />
-        </View>
+        {renderDiscoverModeRail()}
 
         <View style={styles.quickGrid}>
           <QuickAction
@@ -1012,75 +1168,9 @@ export default function App() {
           />
         </View>
 
-        <View style={styles.panel}>
-          <View style={styles.panelHeader}>
-            <Text style={styles.sectionTitle}>直链播放</Text>
-            <Text style={styles.sectionHint}>直播或点播的最终可播放地址</Text>
-          </View>
-          <UrlInput
-            buttonLabel="播放直播"
-            label="直播地址"
-            onChangeText={setLiveUrl}
-            onPress={() =>
-              playDirectUrl('live').catch(() => setMessage('直播加载失败'))
-            }
-            placeholder="https://example.com/live.m3u8"
-            value={liveUrl}
-            variant="primary"
-          />
-          <UrlInput
-            buttonLabel="播放点播"
-            label="点播地址"
-            onChangeText={setVodUrl}
-            onPress={() =>
-              playDirectUrl('vod').catch(() => setMessage('点播加载失败'))
-            }
-            placeholder="https://example.com/movie.mp4"
-            value={vodUrl}
-            variant="secondary"
-          />
-        </View>
-
-        <View style={styles.panel}>
-          <View style={styles.panelHeader}>
-            <Text style={styles.sectionTitle}>直播列表</Text>
-            <Text style={styles.sectionHint}>导入 m3u 后选择频道播放</Text>
-          </View>
-          <TextInput
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            onChangeText={setLivePlaylistUrl}
-            placeholder="https://example.com/live.m3u"
-            placeholderTextColor="#8d96a0"
-            style={styles.input}
-            value={livePlaylistUrl}
-          />
-          <View style={styles.buttonRow}>
-            <CompactButton
-              disabled={loadingLivePlaylist}
-              onPress={importLivePlaylist}
-              variant="primary"
-            >
-              {loadingLivePlaylist ? '导入中' : '导入列表'}
-            </CompactButton>
-            <CompactButton
-              disabled={loadingLivePlaylist}
-              onPress={() =>
-                importBuiltInLivePlaylist().catch(() =>
-                  setMessage('测试直播列表导入失败')
-                )
-              }
-              variant="plain"
-            >
-              测试列表
-            </CompactButton>
-          </View>
-          {renderLiveChannelFilters()}
-          {renderLiveChannelList()}
-        </View>
-
-        {renderSearchPanel()}
+        {showVod ? renderSearchPanel() : null}
+        {showLive ? renderLivePanel() : null}
+        {showDirect ? renderDirectPanel() : null}
       </View>
     );
   }
@@ -1193,6 +1283,34 @@ export default function App() {
   function renderSettings() {
     return (
       <View style={styles.tabContent}>
+        <View style={styles.settingsHero}>
+          <View style={styles.settingsHeroTop}>
+            <Text style={styles.settingsHeroIcon}>♕</Text>
+            <Text style={styles.settingsHeroTitle}>私人 IPTV Pro</Text>
+            <Text style={styles.settingsHeroState}>本机保存</Text>
+          </View>
+        </View>
+
+        <View style={styles.settingsSectionLabelWrap}>
+          <Text style={styles.settingsSectionLabel}>源地址</Text>
+        </View>
+        <View style={styles.settingsGroup}>
+          <View style={styles.sourceAddressRow}>
+            <View style={styles.rowMain}>
+              <Text style={styles.sourceAddressName}>
+                {selectedSite ? selectedSite.name : '未选择点播源'}
+              </Text>
+              <Text numberOfLines={2} selectable style={styles.sourceAddressUrl}>
+                {configUrl || livePlaylistUrl || '导入配置或直播列表后会显示在这里'}
+              </Text>
+            </View>
+            <Text style={styles.rowAction}>更改</Text>
+          </View>
+        </View>
+
+        <View style={styles.settingsSectionLabelWrap}>
+          <Text style={styles.settingsSectionLabel}>直播</Text>
+        </View>
         <View style={styles.settingsGroup}>
           <View style={styles.panelHeader}>
             <Text style={styles.sectionTitle}>直播源批量检测</Text>
@@ -1247,6 +1365,9 @@ export default function App() {
           ) : null}
         </View>
 
+        <View style={styles.settingsSectionLabelWrap}>
+          <Text style={styles.settingsSectionLabel}>点播</Text>
+        </View>
         <View style={styles.settingsGroup}>
           <View style={styles.panelHeader}>
             <Text style={styles.sectionTitle}>配置接口</Text>
@@ -1331,6 +1452,9 @@ export default function App() {
           <SourceList sources={configSources} />
         </View>
 
+        <View style={styles.settingsSectionLabelWrap}>
+          <Text style={styles.settingsSectionLabel}>站点</Text>
+        </View>
         <View style={styles.settingsGroup}>
           <View style={styles.panelHeader}>
             <Text style={styles.sectionTitle}>站点</Text>
@@ -1376,6 +1500,9 @@ export default function App() {
           {renderSiteList()}
         </View>
 
+        <View style={styles.settingsSectionLabelWrap}>
+          <Text style={styles.settingsSectionLabel}>数据</Text>
+        </View>
         <View style={styles.settingsGroup}>
           <View style={styles.panelHeader}>
             <Text style={styles.sectionTitle}>小范围测试说明</Text>
@@ -1402,7 +1529,7 @@ export default function App() {
   }
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, activeTab === 'settings' && styles.settingsRoot]}>
       <StatusBar style="dark" />
       <KeyboardAvoidingView
         behavior={Platform.select({ ios: 'padding', android: undefined })}
@@ -1424,9 +1551,12 @@ export default function App() {
                     pressed && styles.buttonPressed,
                   ]}
                 >
-                  <Text style={styles.sourceIcon}>▣</Text>
+                  <Text style={styles.sourceIcon}>▦</Text>
                   <Text numberOfLines={1} style={styles.brandText}>
-                    私人 IPTV
+                    豆瓣首页
+                  </Text>
+                  <Text numberOfLines={1} style={styles.sourceMeta}>
+                    {selectedSite ? selectedSite.name : '本机源'}
                   </Text>
                 </Pressable>
                 <View style={styles.headerActions}>
@@ -1438,11 +1568,14 @@ export default function App() {
                       pressed && styles.buttonPressed,
                     ]}
                   >
-                    <Text style={styles.circleButtonText}>↗</Text>
+                    <Text style={styles.circleButtonText}>⌁</Text>
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
-                    onPress={() => setActiveTab('discover')}
+                    onPress={() => {
+                      setActiveTab('discover');
+                      setActiveDiscoverMode('vod');
+                    }}
                     style={({ pressed }) => [
                       styles.circleButton,
                       pressed && styles.buttonPressed,
@@ -1452,41 +1585,54 @@ export default function App() {
                   </Pressable>
                 </View>
               </View>
-              <TopTabs
-                activeTab={activeTab}
-                onChange={setActiveTab}
-                tabs={APP_TABS}
-              />
-              <View style={styles.titleBlock}>
-                <Text style={styles.title}>{activeTabMeta.label}</Text>
-                <Text style={styles.subtitle}>{activeTabMeta.description}</Text>
-              </View>
+              {activeTab === 'settings' || activeTab === 'watching' ? (
+                <View style={styles.titleBlock}>
+                  <Text style={styles.title}>{activeTabMeta.label}</Text>
+                  <Text style={styles.subtitle}>{activeTabMeta.description}</Text>
+                </View>
+              ) : null}
             </View>
 
-            <View style={styles.playerShell}>
-              <VideoView
-                allowsFullscreen
-                allowsPictureInPicture
-                contentFit="contain"
-                nativeControls
-                player={player}
-                style={styles.video}
-              />
-            </View>
+            {currentUrl ? (
+              <>
+                <View style={styles.playerShell}>
+                  <VideoView
+                    allowsFullscreen
+                    allowsPictureInPicture
+                    contentFit="contain"
+                    nativeControls
+                    player={player}
+                    style={styles.video}
+                  />
+                </View>
 
-            <View style={styles.statusPanel}>
-              <View style={styles.statusItem}>
-                <Text style={styles.statusLabel}>当前</Text>
-                <Text style={styles.statusValue}>{currentLabel}</Text>
+                <View style={styles.statusPanel}>
+                  <View style={styles.statusItem}>
+                    <Text style={styles.statusLabel}>当前</Text>
+                    <Text style={styles.statusValue}>{currentLabel}</Text>
+                  </View>
+                  <View style={styles.statusDivider} />
+                  <View style={styles.statusMessageGroup}>
+                    <Text style={styles.statusLabel}>状态</Text>
+                    <Text selectable style={styles.statusValue}>
+                      {message}
+                    </Text>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <View style={styles.idleStatusPanel}>
+                <View style={styles.idleStatusIconWrap}>
+                  <Text style={styles.idleStatusIcon}>▶</Text>
+                </View>
+                <View style={styles.rowMain}>
+                  <Text style={styles.idleStatusTitle}>等待播放</Text>
+                  <Text selectable style={styles.idleStatusText}>
+                    {message}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.statusDivider} />
-              <View style={styles.statusMessageGroup}>
-                <Text style={styles.statusLabel}>状态</Text>
-                <Text selectable style={styles.statusValue}>
-                  {message}
-                </Text>
-              </View>
-            </View>
+            )}
 
             {renderActiveTab()}
           </ScrollView>
@@ -1562,33 +1708,6 @@ function CompactButton({
   );
 }
 
-function TopTabs({ activeTab, onChange, tabs }) {
-  return (
-    <View style={styles.topTabs}>
-      {tabs.map((tab) => {
-        const isActive = tab.id === activeTab;
-
-        return (
-          <Pressable
-            accessibilityRole="button"
-            key={tab.id}
-            onPress={() => onChange(tab.id)}
-            style={({ pressed }) => [
-              styles.topTab,
-              isActive && styles.topTabActive,
-              pressed && styles.buttonPressed,
-            ]}
-          >
-            <Text style={[styles.topTabText, isActive && styles.topTabTextActive]}>
-              {tab.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 function BottomTabs({ activeTab, onChange, tabs }) {
   return (
     <View style={styles.bottomTabs}>
@@ -1606,6 +1725,14 @@ function BottomTabs({ activeTab, onChange, tabs }) {
               pressed && styles.buttonPressed,
             ]}
           >
+            <Text
+              style={[
+                styles.bottomTabSymbol,
+                isActive && styles.bottomTabSymbolActive,
+              ]}
+            >
+              {tab.symbol}
+            </Text>
             <Text
               style={[
                 styles.bottomTabText,
@@ -2006,6 +2133,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     flex: 1,
   },
+  settingsRoot: {
+    backgroundColor: '#f2f2f7',
+  },
   keyboardRoot: {
     flex: 1,
   },
@@ -2013,13 +2143,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    gap: 14,
+    gap: 18,
     padding: 16,
-    paddingBottom: 116,
+    paddingBottom: 122,
     paddingTop: 50,
   },
   header: {
-    gap: 14,
+    gap: 12,
   },
   topChrome: {
     alignItems: 'center',
@@ -2030,96 +2160,77 @@ const styles = StyleSheet.create({
   sourcePill: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderColor: '#e5e7eb',
-    borderRadius: 32,
+    borderColor: '#ececf0',
+    borderRadius: 36,
     borderWidth: 1,
-    boxShadow: '0 8px 22px rgba(17, 24, 39, 0.08)',
+    boxShadow: '0 10px 26px rgba(0, 0, 0, 0.08)',
     flex: 1,
     flexDirection: 'row',
-    gap: 10,
-    minHeight: 58,
-    paddingHorizontal: 18,
+    gap: 9,
+    minHeight: 62,
+    paddingHorizontal: 17,
   },
   sourceIcon: {
-    color: '#1d4ed8',
-    fontSize: 20,
+    color: '#2f80ed',
+    fontSize: 22,
     fontWeight: '900',
     letterSpacing: 0,
   },
   brandText: {
-    color: '#111827',
-    fontSize: 20,
+    color: '#111111',
+    fontSize: 22,
     fontWeight: '800',
+    letterSpacing: 0,
+  },
+  sourceMeta: {
+    color: '#8e8e93',
+    flexShrink: 1,
+    fontSize: 13,
+    fontWeight: '700',
     letterSpacing: 0,
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   circleButton: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderColor: '#e5e7eb',
+    borderColor: '#ececf0',
     borderRadius: 28,
     borderWidth: 1,
-    boxShadow: '0 8px 22px rgba(17, 24, 39, 0.08)',
-    height: 58,
+    boxShadow: '0 10px 26px rgba(0, 0, 0, 0.08)',
+    height: 62,
     justifyContent: 'center',
-    width: 58,
+    width: 62,
   },
   circleButtonText: {
-    color: '#111827',
-    fontSize: 26,
-    fontWeight: '900',
-    letterSpacing: 0,
-  },
-  topTabs: {
-    backgroundColor: '#e8ebef',
-    borderRadius: 18,
-    flexDirection: 'row',
-    gap: 4,
-    padding: 4,
-  },
-  topTab: {
-    alignItems: 'center',
-    borderRadius: 14,
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 34,
-  },
-  topTabActive: {
-    backgroundColor: '#ffffff',
-    boxShadow: '0 1px 2px rgba(17, 24, 39, 0.12)',
-  },
-  topTabText: {
-    color: '#667085',
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0,
-  },
-  topTabTextActive: {
-    color: '#111827',
-  },
-  titleBlock: {
-    gap: 3,
-  },
-  title: {
-    color: '#111827',
+    color: '#050505',
     fontSize: 28,
     fontWeight: '900',
     letterSpacing: 0,
   },
+  titleBlock: {
+    gap: 2,
+    paddingHorizontal: 2,
+  },
+  title: {
+    color: '#050505',
+    fontSize: 30,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
   subtitle: {
-    color: '#667085',
+    color: '#8e8e93',
     fontSize: 14,
+    fontWeight: '600',
     letterSpacing: 0,
     lineHeight: 20,
   },
   playerShell: {
     backgroundColor: '#000000',
-    borderColor: '#d8dde5',
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 18,
+    boxShadow: '0 12px 28px rgba(0, 0, 0, 0.12)',
     overflow: 'hidden',
   },
   video: {
@@ -2129,8 +2240,8 @@ const styles = StyleSheet.create({
   statusPanel: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderColor: '#dde2ea',
-    borderRadius: 8,
+    borderColor: '#efeff4',
+    borderRadius: 18,
     borderWidth: 1,
     flexDirection: 'row',
     gap: 12,
@@ -2140,12 +2251,12 @@ const styles = StyleSheet.create({
     minWidth: 54,
   },
   statusLabel: {
-    color: '#7b8491',
+    color: '#8e8e93',
     fontSize: 12,
     letterSpacing: 0,
   },
   statusValue: {
-    color: '#111827',
+    color: '#111111',
     flexShrink: 1,
     fontSize: 15,
     fontWeight: '800',
@@ -2154,39 +2265,98 @@ const styles = StyleSheet.create({
   },
   statusDivider: {
     alignSelf: 'stretch',
-    backgroundColor: '#e1e6ee',
+    backgroundColor: '#ededf2',
     width: 1,
   },
   statusMessageGroup: {
     flex: 1,
     gap: 3,
   },
+  idleStatusPanel: {
+    alignItems: 'center',
+    backgroundColor: '#f7f7f8',
+    borderRadius: 20,
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 74,
+    padding: 14,
+  },
+  idleStatusIconWrap: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  idleStatusIcon: {
+    color: '#2f80ed',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  idleStatusTitle: {
+    color: '#111111',
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  idleStatusText: {
+    color: '#8e8e93',
+    fontSize: 13,
+    letterSpacing: 0,
+    lineHeight: 18,
+  },
   tabContent: {
-    gap: 14,
+    gap: 16,
+  },
+  discoverModeScroller: {
+    marginHorizontal: -16,
+  },
+  discoverModeRow: {
+    flexDirection: 'row',
+    gap: 26,
+    paddingHorizontal: 16,
+  },
+  discoverModeButton: {
+    justifyContent: 'center',
+    minHeight: 42,
+  },
+  discoverModeButtonActive: {},
+  discoverModeText: {
+    color: '#8e8e93',
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: 0,
+  },
+  discoverModeTextActive: {
+    color: '#050505',
+    fontSize: 28,
+    fontWeight: '900',
   },
   statsGrid: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   statTile: {
     backgroundColor: '#ffffff',
-    borderColor: '#dde2ea',
-    borderRadius: 8,
+    borderColor: '#efeff4',
+    borderRadius: 18,
     borderWidth: 1,
     flex: 1,
     gap: 2,
-    minHeight: 70,
+    minHeight: 66,
     padding: 12,
   },
   statValue: {
-    color: '#0f766e',
+    color: '#2f80ed',
     fontSize: 24,
     fontVariant: ['tabular-nums'],
     fontWeight: '900',
     letterSpacing: 0,
   },
   statLabel: {
-    color: '#667085',
+    color: '#8e8e93',
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0,
@@ -2194,87 +2364,143 @@ const styles = StyleSheet.create({
   quickGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
   },
   quickAction: {
-    backgroundColor: '#ffffff',
-    borderColor: '#dde2ea',
-    borderRadius: 8,
+    backgroundColor: '#f1f1f3',
+    borderRadius: 12,
     borderWidth: 1,
+    borderColor: '#f1f1f3',
     gap: 4,
-    minHeight: 72,
-    padding: 12,
+    minHeight: 50,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
     width: '48.5%',
   },
   quickValue: {
-    color: '#1d4ed8',
-    fontSize: 18,
+    color: '#111111',
+    fontSize: 16,
     fontWeight: '900',
     letterSpacing: 0,
   },
   quickLabel: {
-    color: '#667085',
+    color: '#8e8e93',
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0,
   },
   panel: {
     backgroundColor: '#ffffff',
-    borderColor: '#dde2ea',
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 12,
-    padding: 14,
+    borderRadius: 22,
+    gap: 13,
+    padding: 16,
   },
   settingsGroup: {
     backgroundColor: '#ffffff',
-    borderColor: '#dde2ea',
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 26,
+    gap: 13,
+    padding: 18,
+  },
+  settingsHero: {
+    backgroundColor: '#ffffff',
+    borderRadius: 30,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  settingsHeroTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
     gap: 12,
-    padding: 14,
+    minHeight: 42,
+  },
+  settingsHeroIcon: {
+    color: '#2f80ed',
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  settingsHeroTitle: {
+    color: '#111111',
+    flex: 1,
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  settingsHeroState: {
+    color: '#8e8e93',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 0,
+  },
+  settingsSectionLabelWrap: {
+    paddingHorizontal: 22,
+    paddingTop: 6,
+  },
+  settingsSectionLabel: {
+    color: '#8e8e93',
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  sourceAddressRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 76,
+  },
+  sourceAddressName: {
+    color: '#2f80ed',
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  sourceAddressUrl: {
+    color: '#8e8e93',
+    fontSize: 14,
+    letterSpacing: 0,
+    lineHeight: 19,
   },
   panelHeader: {
-    gap: 3,
+    gap: 4,
   },
   sectionTitle: {
-    color: '#111827',
-    fontSize: 17,
+    color: '#111111',
+    fontSize: 20,
     fontWeight: '900',
     letterSpacing: 0,
   },
   sectionHint: {
-    color: '#7b8491',
-    fontSize: 12,
+    color: '#8e8e93',
+    fontSize: 13,
     letterSpacing: 0,
-    lineHeight: 17,
+    lineHeight: 18,
   },
   inputGroup: {
     gap: 9,
   },
   inputLabel: {
-    color: '#344054',
+    color: '#333333',
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0,
   },
   input: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#d7dde6',
-    borderRadius: 8,
+    backgroundColor: '#f2f2f7',
+    borderColor: '#f2f2f7',
+    borderRadius: 16,
     borderWidth: 1,
-    color: '#111827',
-    fontSize: 14,
+    color: '#111111',
+    fontSize: 15,
     letterSpacing: 0,
-    minHeight: 48,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
+    minHeight: 50,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
   },
   multilineInput: {
     minHeight: 128,
   },
   helperText: {
-    color: '#667085',
+    color: '#8e8e93',
     fontSize: 12,
     letterSpacing: 0,
     lineHeight: 18,
@@ -2283,11 +2509,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   searchInput: {
-    backgroundColor: '#ffffff',
-    borderColor: '#d7dde6',
-    borderRadius: 22,
-    borderWidth: 1,
-    color: '#111827',
+    backgroundColor: '#f2f2f7',
+    borderRadius: 18,
+    color: '#111111',
     fontSize: 15,
     letterSpacing: 0,
     minHeight: 44,
@@ -2302,59 +2526,54 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   filterChip: {
-    backgroundColor: '#eef2f7',
-    borderRadius: 18,
-    minHeight: 34,
-    paddingHorizontal: 12,
+    backgroundColor: '#eeeeef',
+    borderRadius: 10,
     justifyContent: 'center',
+    minHeight: 36,
+    paddingHorizontal: 13,
   },
   filterChipActive: {
-    backgroundColor: '#1d4ed8',
+    backgroundColor: '#2f80ed',
   },
   filterChipText: {
-    color: '#344054',
-    fontSize: 13,
-    fontWeight: '800',
+    color: '#111111',
+    fontSize: 15,
+    fontWeight: '700',
     letterSpacing: 0,
   },
   filterChipTextActive: {
     color: '#ffffff',
   },
   emptyText: {
-    color: '#667085',
-    fontSize: 13,
+    color: '#8e8e93',
+    fontSize: 14,
     letterSpacing: 0,
     lineHeight: 19,
   },
   buttonRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 9,
   },
   compactButton: {
     alignItems: 'center',
-    backgroundColor: '#eef2f7',
-    borderColor: '#d7dde6',
-    borderRadius: 8,
-    borderWidth: 1,
+    backgroundColor: '#eeeeef',
+    borderRadius: 16,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 44,
-    paddingHorizontal: 12,
+    minHeight: 46,
+    paddingHorizontal: 13,
   },
   fullWidthButton: {
     width: '100%',
   },
   primaryButton: {
-    backgroundColor: '#0f766e',
-    borderColor: '#0f766e',
+    backgroundColor: '#34c759',
   },
   secondaryButton: {
-    backgroundColor: '#c2410c',
-    borderColor: '#c2410c',
+    backgroundColor: '#ff9500',
   },
   accentButton: {
-    backgroundColor: '#1d4ed8',
-    borderColor: '#1d4ed8',
+    backgroundColor: '#2f80ed',
   },
   compactButtonText: {
     color: '#ffffff',
@@ -2363,7 +2582,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   plainButtonText: {
-    color: '#111827',
+    color: '#111111',
   },
   buttonPressed: {
     opacity: 0.72,
@@ -2372,51 +2591,48 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   listStack: {
-    gap: 9,
+    gap: 8,
   },
   listRow: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    borderColor: '#d7dde6',
-    borderRadius: 8,
-    borderWidth: 1,
+    backgroundColor: '#f7f7f8',
+    borderRadius: 16,
     flexDirection: 'row',
     gap: 10,
-    padding: 12,
+    minHeight: 62,
+    padding: 13,
   },
   listRowActive: {
-    borderColor: '#0f766e',
+    backgroundColor: '#eaf3ff',
   },
   resultRow: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    borderColor: '#d7dde6',
-    borderRadius: 8,
-    borderWidth: 1,
+    backgroundColor: '#f7f7f8',
+    borderRadius: 16,
     flexDirection: 'row',
     gap: 10,
     minHeight: 58,
     padding: 12,
   },
   resultRowActive: {
-    borderColor: '#1d4ed8',
+    backgroundColor: '#eaf3ff',
   },
   vodGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 11,
   },
   vodCard: {
     gap: 7,
-    width: '48%',
+    width: '31.4%',
   },
   vodCardActive: {
     opacity: 0.82,
   },
   posterFrame: {
     aspectRatio: 2 / 3,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 8,
+    backgroundColor: '#e5e5ea',
+    borderRadius: 10,
     overflow: 'hidden',
     position: 'relative',
     width: '100%',
@@ -2427,7 +2643,7 @@ const styles = StyleSheet.create({
   },
   posterPlaceholder: {
     alignItems: 'center',
-    backgroundColor: '#e5e7eb',
+    backgroundColor: '#e5e5ea',
     height: '100%',
     justifyContent: 'center',
     width: '100%',
@@ -2439,10 +2655,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   posterBadge: {
-    backgroundColor: '#f59e0b',
+    backgroundColor: '#f6a04d',
     borderBottomLeftRadius: 8,
+    borderTopRightRadius: 10,
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
     letterSpacing: 0,
     maxWidth: '80%',
@@ -2454,8 +2671,8 @@ const styles = StyleSheet.create({
     top: 0,
   },
   vodCardTitle: {
-    color: '#111827',
-    fontSize: 14,
+    color: '#111111',
+    fontSize: 15,
     fontWeight: '800',
     letterSpacing: 0,
     lineHeight: 19,
@@ -2466,18 +2683,18 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   rowTitle: {
-    color: '#111827',
+    color: '#111111',
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 0,
   },
   rowMeta: {
-    color: '#667085',
+    color: '#8e8e93',
     fontSize: 12,
     letterSpacing: 0,
   },
   rowAction: {
-    color: '#1d4ed8',
+    color: '#2f80ed',
     fontSize: 13,
     fontWeight: '900',
     letterSpacing: 0,
@@ -2489,9 +2706,9 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   badge: {
-    backgroundColor: '#e5f6f2',
-    borderRadius: 8,
-    color: '#08735d',
+    backgroundColor: '#e8f5ee',
+    borderRadius: 12,
+    color: '#168a56',
     fontSize: 12,
     fontWeight: '900',
     letterSpacing: 0,
@@ -2502,30 +2719,54 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   badgeMuted: {
-    backgroundColor: '#fff4e5',
-    color: '#b45309',
+    backgroundColor: '#fff2df',
+    color: '#c16b18',
   },
   selectedSitePanel: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#d7dde6',
-    borderRadius: 8,
-    borderWidth: 1,
+    backgroundColor: '#f7f7f8',
+    borderRadius: 16,
     gap: 3,
-    padding: 10,
+    padding: 12,
+  },
+  siteRailScroller: {
+    marginHorizontal: -4,
+  },
+  siteRail: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  siteChip: {
+    backgroundColor: '#eeeeef',
+    borderRadius: 12,
+    justifyContent: 'center',
+    maxWidth: 132,
+    minHeight: 38,
+    paddingHorizontal: 12,
+  },
+  siteChipActive: {
+    backgroundColor: '#2f80ed',
+  },
+  siteChipText: {
+    color: '#111111',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  siteChipTextActive: {
+    color: '#ffffff',
   },
   selectedSiteText: {
-    color: '#111827',
+    color: '#111111',
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 0,
   },
   selectedDetailPanel: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#d7dde6',
-    borderRadius: 8,
-    borderWidth: 1,
+    backgroundColor: '#f7f7f8',
+    borderRadius: 16,
     gap: 4,
-    padding: 10,
+    padding: 12,
   },
   playGroupList: {
     gap: 12,
@@ -2534,7 +2775,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   playGroupTitle: {
-    color: '#344054',
+    color: '#333333',
     fontSize: 14,
     fontWeight: '900',
     letterSpacing: 0,
@@ -2546,17 +2787,15 @@ const styles = StyleSheet.create({
   },
   episodeButton: {
     alignItems: 'center',
-    backgroundColor: '#eef2f7',
-    borderColor: '#d7dde6',
-    borderRadius: 8,
-    borderWidth: 1,
+    backgroundColor: '#eeeeef',
+    borderRadius: 12,
     justifyContent: 'center',
     minHeight: 38,
     minWidth: 78,
     paddingHorizontal: 10,
   },
   episodeButtonText: {
-    color: '#111827',
+    color: '#111111',
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0,
@@ -2566,39 +2805,37 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   summaryRow: {
-    borderBottomColor: '#eef2f7',
+    borderBottomColor: '#ededf2',
     borderBottomWidth: 1,
     gap: 4,
     paddingBottom: 10,
   },
   summaryLabel: {
-    color: '#7b8491',
+    color: '#8e8e93',
     fontSize: 12,
     letterSpacing: 0,
   },
   summaryValue: {
-    color: '#111827',
+    color: '#111111',
     fontSize: 14,
     fontWeight: '800',
     letterSpacing: 0,
     lineHeight: 19,
   },
   currentUrl: {
-    color: '#475467',
+    color: '#555555',
     fontSize: 12,
     letterSpacing: 0,
     lineHeight: 18,
   },
   diagnosticsPanel: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#d7dde6',
-    borderRadius: 8,
-    borderWidth: 1,
+    backgroundColor: '#f7f7f8',
+    borderRadius: 18,
     gap: 10,
     padding: 12,
   },
   diagnosticsSummary: {
-    color: '#111827',
+    color: '#111111',
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0,
@@ -2611,8 +2848,8 @@ const styles = StyleSheet.create({
   },
   diagnosticTile: {
     backgroundColor: '#ffffff',
-    borderColor: '#e1e6ee',
-    borderRadius: 8,
+    borderColor: '#ededf2',
+    borderRadius: 14,
     borderWidth: 1,
     gap: 2,
     minHeight: 52,
@@ -2621,20 +2858,20 @@ const styles = StyleSheet.create({
     width: '48%',
   },
   diagnosticValue: {
-    color: '#1d4ed8',
+    color: '#2f80ed',
     fontSize: 16,
     fontVariant: ['tabular-nums'],
     fontWeight: '900',
     letterSpacing: 0,
   },
   diagnosticLabel: {
-    color: '#667085',
+    color: '#8e8e93',
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0,
   },
   siteTestPanel: {
-    borderRadius: 8,
+    borderRadius: 18,
     borderWidth: 1,
     gap: 9,
     padding: 12,
@@ -2648,13 +2885,13 @@ const styles = StyleSheet.create({
     borderColor: '#fed7aa',
   },
   siteTestTitle: {
-    color: '#111827',
+    color: '#111111',
     fontSize: 14,
     fontWeight: '900',
     letterSpacing: 0,
   },
   siteTestMessage: {
-    color: '#475467',
+    color: '#555555',
     fontSize: 12,
     letterSpacing: 0,
     lineHeight: 18,
@@ -2666,7 +2903,7 @@ const styles = StyleSheet.create({
   },
   batchResultRow: {
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row',
     gap: 10,
@@ -2682,8 +2919,8 @@ const styles = StyleSheet.create({
   },
   inlineActionButton: {
     alignItems: 'center',
-    backgroundColor: '#0f766e',
-    borderRadius: 8,
+    backgroundColor: '#34c759',
+    borderRadius: 12,
     justifyContent: 'center',
     minHeight: 34,
     minWidth: 54,
@@ -2700,52 +2937,61 @@ const styles = StyleSheet.create({
   },
   sourceRow: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    borderColor: '#d7dde6',
-    borderRadius: 8,
-    borderWidth: 1,
+    backgroundColor: '#f7f7f8',
+    borderRadius: 16,
     flexDirection: 'row',
     gap: 10,
     padding: 10,
   },
   privacyText: {
-    color: '#475467',
+    color: '#555555',
     fontSize: 13,
     letterSpacing: 0,
     lineHeight: 20,
   },
   bottomTabs: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.88)',
-    borderColor: 'rgba(215, 221, 230, 0.78)',
+    backgroundColor: 'rgba(255, 255, 255, 0.84)',
+    borderColor: 'rgba(210, 210, 215, 0.72)',
     borderRadius: 38,
     borderWidth: 1,
     bottom: 18,
-    boxShadow: '0 12px 30px rgba(17, 24, 39, 0.18)',
+    boxShadow: '0 12px 30px rgba(0, 0, 0, 0.18)',
     flexDirection: 'row',
-    gap: 6,
-    left: 42,
-    padding: 8,
+    gap: 4,
+    left: 34,
+    padding: 7,
     position: 'absolute',
-    right: 42,
+    right: 34,
   },
   bottomTab: {
     alignItems: 'center',
     borderRadius: 30,
     flex: 1,
+    gap: 2,
     justifyContent: 'center',
-    minHeight: 56,
+    minHeight: 58,
   },
   bottomTabActive: {
-    backgroundColor: 'rgba(29, 78, 216, 0.16)',
+    backgroundColor: 'rgba(47, 128, 237, 0.16)',
+  },
+  bottomTabSymbol: {
+    color: '#111111',
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 27,
+  },
+  bottomTabSymbolActive: {
+    color: '#2f80ed',
   },
   bottomTabText: {
-    color: '#667085',
-    fontSize: 13,
+    color: '#111111',
+    fontSize: 12,
     fontWeight: '900',
     letterSpacing: 0,
   },
   bottomTabTextActive: {
-    color: '#1d4ed8',
+    color: '#2f80ed',
   },
 });

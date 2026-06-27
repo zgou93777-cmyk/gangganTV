@@ -4,6 +4,7 @@ const test = require('node:test');
 const {
   APP_TABS,
   DEFAULT_TAB_ID,
+  DISCOVER_MODES,
   buildLiveChannelGroups,
   buildVodResultCards,
   buildWatchingSummary,
@@ -21,6 +22,22 @@ test('defines the three MiraPlay-inspired tabs in display order', () => {
     ]
   );
   assert.equal(DEFAULT_TAB_ID, 'discover');
+  assert.deepEqual(
+    APP_TABS.map((tab) => tab.symbol),
+    ['▶', '♥', '⚙']
+  );
+});
+
+test('defines discover content modes for the home category rail', () => {
+  assert.deepEqual(
+    DISCOVER_MODES.map((mode) => [mode.id, mode.label]),
+    [
+      ['all', '热门内容'],
+      ['live', '直播频道'],
+      ['vod', '点播搜索'],
+      ['direct', '直链播放'],
+    ]
+  );
 });
 
 test('returns the requested tab or falls back to discover', () => {
