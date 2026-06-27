@@ -33,6 +33,10 @@ const {
   buildWatchingSummary,
   getTabById,
 } = require('./src/ui-model');
+const {
+  addPlayHistoryItem,
+  normalizePlayHistory,
+} = require('./src/play-history');
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
@@ -46,6 +50,7 @@ const STORAGE_KEYS = {
   configSources: 'iptv.prototype.configSources',
   sites: 'iptv.prototype.sites',
   selectedSiteId: 'iptv.prototype.selectedSiteId',
+  playHistory: 'iptv.prototype.playHistory',
 };
 
 const LABELS = {
@@ -70,6 +75,7 @@ export default function App() {
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [activeType, setActiveType] = useState('live');
   const [currentUrl, setCurrentUrl] = useState('');
+  const [playHistory, setPlayHistory] = useState([]);
   const [message, setMessage] = useState('等待播放地址');
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [loadingLivePlaylist, setLoadingLivePlaylist] = useState(false);
@@ -103,9 +109,10 @@ export default function App() {
         liveChannels,
         configSources,
         sites,
+        playHistory,
         currentUrl,
       }),
-    [configSources, currentUrl, liveChannels, sites]
+    [configSources, currentUrl, liveChannels, playHistory, sites]
   );
 
   useEffect(() => {
@@ -140,6 +147,7 @@ export default function App() {
       storedSources,
       storedSites,
       storedSelectedSiteId,
+      storedPlayHistory,
     ] = await Promise.all([
       AsyncStorage.getItem(STORAGE_KEYS.live),
       AsyncStorage.getItem(STORAGE_KEYS.livePlaylistUrl),
@@ -149,11 +157,13 @@ export default function App() {
       AsyncStorage.getItem(STORAGE_KEYS.configSources),
       AsyncStorage.getItem(STORAGE_KEYS.sites),
       AsyncStorage.getItem(STORAGE_KEYS.selectedSiteId),
+      AsyncStorage.getItem(STORAGE_KEYS.playHistory),
     ]);
 
     const nextSources = parseStoredArray(storedSources);
     const nextSites = parseStoredArray(storedSites);
     const nextLiveChannels = parseStoredArray(storedLiveChannels);
+    const nextPlayHistory = normalizePlayHistory(parseStoredArray(storedPlayHistory));
 
     setLiveUrl(storedLiveUrl || '');
     setLivePlaylistUrl(storedLivePlaylistUrl || '');
@@ -162,6 +172,7 @@ export default function App() {
     setConfigUrl(storedConfigUrl || '');
     setConfigSources(nextSources);
     setSites(nextSites);
+    setPlayHistory(nextPlayHistory);
 
     if (nextSites.some((site) => site.id === storedSelectedSiteId)) {
       setSelectedSiteId(storedSelectedSiteId);
@@ -195,10 +206,12 @@ export default function App() {
     }
 
     await AsyncStorage.setItem(STORAGE_KEYS[type], cleanUrl);
-    await playResolvedUrl(type, cleanUrl, `${LABELS[type]}地址`);
+    await playResolvedUrl(type, cleanUrl, `${LABELS[type]}地址`, {
+      sourceName: '直链播放',
+    });
   }
 
-  async function playResolvedUrl(type, url, title) {
+  async function playResolvedUrl(type, url, title, historyMeta = {}) {
     setActiveType(type);
     setCurrentUrl(url);
     setMessage('正在加载视频');
@@ -210,6 +223,46 @@ export default function App() {
       },
     });
     player.play();
+    await recordPlayHistory({
+      type,
+      title,
+      url,
+      sourceName: historyMeta.sourceName || '',
+    });
+  }
+
+  async function recordPlayHistory(item) {
+    const nextHistory = addPlayHistoryItem(playHistory, item);
+
+    setPlayHistory(nextHistory);
+    await saveJson(STORAGE_KEYS.playHistory, nextHistory);
+  }
+
+  async function playHistoryItem(item) {
+    if (!item?.url) {
+      setMessage('这条历史记录没有可播放地址');
+      return;
+    }
+
+    await playResolvedUrl(item.type || 'vod', item.url, item.title, {
+      sourceName: item.sourceName || '播放历史',
+    });
+  }
+
+  async function continueLatestPlay() {
+    if (currentUrl) {
+      pauseOrResume();
+      return;
+    }
+
+    const latestItem = playHistory[0];
+
+    if (latestItem) {
+      await playHistoryItem(latestItem);
+      return;
+    }
+
+    pauseOrResume();
   }
 
   function pauseOrResume() {
@@ -281,7 +334,9 @@ export default function App() {
 
     setLiveUrl(channel.url);
     await AsyncStorage.setItem(STORAGE_KEYS.live, channel.url);
-    await playResolvedUrl('live', channel.url, channel.name);
+    await playResolvedUrl('live', channel.url, channel.name, {
+      sourceName: channel.group || '直播列表',
+    });
   }
 
   async function importConfigSource() {
@@ -472,7 +527,10 @@ export default function App() {
       await playResolvedUrl(
         'vod',
         playableUrl,
-        `${selectedDetail.name} ${episode.name}`
+        `${selectedDetail.name} ${episode.name}`,
+        {
+          sourceName: selectedSite.name,
+        }
       );
     } catch (episodeError) {
       setMessage(episodeError?.message || '播放地址解析失败');
@@ -676,7 +734,7 @@ export default function App() {
         <View style={styles.statsGrid}>
           <StatTile label="直播频道" value={watchingSummary.liveChannelCount} />
           <StatTile label="配置源" value={watchingSummary.configSourceCount} />
-          <StatTile label="可用站点" value={watchingSummary.siteCount} />
+          <StatTile label="最近播放" value={watchingSummary.playHistoryCount} />
         </View>
 
         <View style={styles.quickGrid}>
@@ -703,7 +761,9 @@ export default function App() {
           />
           <QuickAction
             label="继续播放"
-            onPress={pauseOrResume}
+            onPress={() =>
+              continueLatestPlay().catch(() => setMessage('继续播放失败'))
+            }
             value={isPlaying ? '暂停' : '播放'}
           />
         </View>
@@ -791,7 +851,13 @@ export default function App() {
           <View style={styles.summaryList}>
             <SummaryRow
               label="当前播放"
-              value={watchingSummary.hasCurrentUrl ? '有地址' : '未播放'}
+              value={
+                watchingSummary.hasCurrentUrl
+                  ? '有地址'
+                  : playHistory.length
+                    ? '可继续最近播放'
+                    : '未播放'
+              }
             />
             <SummaryRow label="直播地址" value={liveUrl || '未保存'} selectable />
             <SummaryRow label="点播地址" value={vodUrl || '未保存'} selectable />
@@ -801,7 +867,12 @@ export default function App() {
             />
           </View>
           <View style={styles.buttonRow}>
-            <CompactButton onPress={pauseOrResume} variant="accent">
+            <CompactButton
+              onPress={() =>
+                continueLatestPlay().catch(() => setMessage('继续播放失败'))
+              }
+              variant="accent"
+            >
               {isPlaying ? '暂停播放' : '继续播放'}
             </CompactButton>
             <CompactButton
@@ -813,6 +884,42 @@ export default function App() {
               播放直播
             </CompactButton>
           </View>
+        </View>
+
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.sectionTitle}>播放历史</Text>
+            <Text style={styles.sectionHint}>最近播放会自动保存在本机</Text>
+          </View>
+          {playHistory.length ? (
+            <View style={styles.listStack}>
+              {playHistory.slice(0, 12).map((item) => (
+                <Pressable
+                  accessibilityRole="button"
+                  key={item.id}
+                  onPress={() =>
+                    playHistoryItem(item).catch(() => setMessage('历史播放失败'))
+                  }
+                  style={({ pressed }) => [
+                    styles.listRow,
+                    pressed && styles.buttonPressed,
+                  ]}
+                >
+                  <View style={styles.rowMain}>
+                    <Text style={styles.rowTitle}>{item.title}</Text>
+                    <Text numberOfLines={1} selectable style={styles.rowMeta}>
+                      {formatHistoryType(item.type)} · {item.sourceName || '本机历史'}
+                    </Text>
+                  </View>
+                  <Text style={styles.rowAction}>继续</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>
+              还没有播放历史。播放一次直播频道、点播剧集或直链地址后，这里会出现继续播放入口。
+            </Text>
+          )}
         </View>
 
         <View style={styles.panel}>
@@ -1204,6 +1311,10 @@ function formatSiteType(type) {
   }
 
   return `类型 ${type}`;
+}
+
+function formatHistoryType(type) {
+  return LABELS[type] || '播放';
 }
 
 const styles = StyleSheet.create({

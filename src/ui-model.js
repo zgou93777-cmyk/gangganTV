@@ -26,12 +26,14 @@ function buildWatchingSummary({
   liveChannels = [],
   configSources = [],
   sites = [],
+  playHistory = [],
   currentUrl = '',
 } = {}) {
   return {
     hasCurrentUrl: Boolean(currentUrl),
     liveChannelCount: liveChannels.length,
     configSourceCount: configSources.length,
+    playHistoryCount: playHistory.length,
     siteCount: sites.length,
   };
 }

@@ -30,6 +30,7 @@ test('builds compact watching summary counts for the home UI', () => {
     liveChannels: [{ id: 'one' }, { id: 'two' }],
     configSources: [{ id: 'source' }],
     sites: [{ id: 'site-a' }, { id: 'site-b' }, { id: 'site-c' }],
+    playHistory: [{ id: 'recent' }],
     currentUrl: 'https://example.com/live.m3u8',
   });
 
@@ -37,6 +38,7 @@ test('builds compact watching summary counts for the home UI', () => {
     hasCurrentUrl: true,
     liveChannelCount: 2,
     configSourceCount: 1,
+    playHistoryCount: 1,
     siteCount: 3,
   });
 });
