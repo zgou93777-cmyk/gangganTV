@@ -38,7 +38,10 @@ const {
   addPlayHistoryItem,
   normalizePlayHistory,
 } = require('./src/play-history');
-const { testTvBoxSite } = require('./src/site-tester');
+const {
+  testTvBoxSite,
+  testTvBoxSites,
+} = require('./src/site-tester');
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
@@ -87,6 +90,8 @@ export default function App() {
   const [testingSite, setTestingSite] = useState(false);
   const [siteTestResult, setSiteTestResult] = useState(null);
   const [siteTestKeyword, setSiteTestKeyword] = useState('test');
+  const [testingSites, setTestingSites] = useState(false);
+  const [batchSiteTestResult, setBatchSiteTestResult] = useState(null);
 
   const player = useVideoPlayer(null, (videoPlayer) => {
     videoPlayer.loop = false;
@@ -481,6 +486,25 @@ export default function App() {
       setMessage(result.message);
     } finally {
       setTestingSite(false);
+    }
+  }
+
+  async function testAllSearchableSites() {
+    setTestingSites(true);
+    setBatchSiteTestResult(null);
+    setMessage('正在批量测试可搜索站点');
+
+    try {
+      const result = await testTvBoxSites(sites, {
+        keyword: siteTestKeyword,
+      });
+
+      setBatchSiteTestResult(result);
+      setMessage(
+        `批量测试完成：${result.passedCount} 个通过，${result.failedCount} 个失败`
+      );
+    } finally {
+      setTestingSites(false);
     }
   }
 
@@ -1050,6 +1074,18 @@ export default function App() {
           >
             {testingSite ? '测试中' : '测试当前站点'}
           </CompactButton>
+          <CompactButton
+            disabled={!configDiagnostics.searchableSites || testingSites}
+            onPress={() =>
+              testAllSearchableSites().catch(() => setMessage('批量测试失败'))
+            }
+            variant="primary"
+          >
+            {testingSites ? '批量测试中' : '一键测试可搜索站点'}
+          </CompactButton>
+          {batchSiteTestResult ? (
+            <BatchSiteTestResultPanel batch={batchSiteTestResult} />
+          ) : null}
           {siteTestResult ? <SiteTestResultPanel result={siteTestResult} /> : null}
           {renderSiteList()}
         </View>
@@ -1342,6 +1378,42 @@ function SiteTestResultPanel({ result }) {
           样例结果：{result.resultName}
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+function BatchSiteTestResultPanel({ batch }) {
+  return (
+    <View style={styles.siteTestPanel}>
+      <Text style={styles.siteTestTitle}>
+        批量测试：{batch.passedCount} 通过 / {batch.failedCount} 失败
+      </Text>
+      <Text style={styles.siteTestMessage}>
+        关键词：{batch.keyword} · 已测试 {batch.totalSites} 个可搜索站点
+      </Text>
+      <View style={styles.listStack}>
+        {batch.results.map((result) => (
+          <View
+            key={result.siteId}
+            style={[
+              styles.batchResultRow,
+              result.ok ? styles.batchResultPassed : styles.batchResultFailed,
+            ]}
+          >
+            <View style={styles.rowMain}>
+              <Text style={styles.rowTitle}>{result.siteName}</Text>
+              <Text selectable style={styles.rowMeta}>
+                {result.ok
+                  ? `${result.resultName || '有搜索结果'} · ${result.playGroupCount} 线路 · ${result.episodeCount} 剧集`
+                  : result.message}
+              </Text>
+            </View>
+            <Text style={[styles.badge, !result.ok && styles.badgeMuted]}>
+              {result.ok ? '通过' : '失败'}
+            </Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
@@ -1950,6 +2022,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  batchResultRow: {
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    padding: 10,
+  },
+  batchResultPassed: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+  },
+  batchResultFailed: {
+    backgroundColor: '#fff7ed',
+    borderColor: '#fed7aa',
   },
   sourceList: {
     gap: 8,

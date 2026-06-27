@@ -59,6 +59,38 @@ async function testTvBoxSite(
   }
 }
 
+async function testTvBoxSites(
+  sites,
+  { keyword = DEFAULT_TEST_KEYWORD, fetchImpl = fetch } = {}
+) {
+  const usableSites = Array.isArray(sites)
+    ? sites.filter((site) => site?.searchable && !site.unsupportedReason)
+    : [];
+  const results = [];
+
+  for (const site of usableSites) {
+    const result = await testTvBoxSite(site, { keyword, fetchImpl });
+
+    results.push({
+      ...result,
+      siteId: site.id || site.siteKey || site.api || site.name,
+      siteName: site.name || site.api || '未命名站点',
+    });
+  }
+
+  const passedCount = results.filter((result) => result.ok).length;
+
+  return {
+    keyword: typeof keyword === 'string' && keyword.trim()
+      ? keyword.trim()
+      : DEFAULT_TEST_KEYWORD,
+    totalSites: usableSites.length,
+    passedCount,
+    failedCount: results.length - passedCount,
+    results,
+  };
+}
+
 function buildFailedResult(status, message, keyword, resultName = '') {
   return {
     ok: false,
@@ -74,4 +106,5 @@ function buildFailedResult(status, message, keyword, resultName = '') {
 module.exports = {
   DEFAULT_TEST_KEYWORD,
   testTvBoxSite,
+  testTvBoxSites,
 };
