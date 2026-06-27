@@ -27,6 +27,12 @@ const {
   isBuiltInMockConfigUrl,
   resolveTvBoxEpisode,
 } = require('./src/iptv-api');
+const {
+  APP_TABS,
+  DEFAULT_TAB_ID,
+  buildWatchingSummary,
+  getTabById,
+} = require('./src/ui-model');
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
@@ -49,6 +55,7 @@ const LABELS = {
 };
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState(DEFAULT_TAB_ID);
   const [liveUrl, setLiveUrl] = useState('');
   const [livePlaylistUrl, setLivePlaylistUrl] = useState('');
   const [liveChannels, setLiveChannels] = useState([]);
@@ -88,7 +95,18 @@ export default function App() {
     [selectedSiteId, sites]
   );
 
-  const currentLabel = useMemo(() => LABELS[activeType], [activeType]);
+  const activeTabMeta = useMemo(() => getTabById(activeTab), [activeTab]);
+  const currentLabel = useMemo(() => LABELS[activeType] || '播放', [activeType]);
+  const watchingSummary = useMemo(
+    () =>
+      buildWatchingSummary({
+        liveChannels,
+        configSources,
+        sites,
+        currentUrl,
+      }),
+    [configSources, currentUrl, liveChannels, sites]
+  );
 
   useEffect(() => {
     restoreLocalState().catch(() => {
@@ -374,6 +392,7 @@ export default function App() {
       setMessage('该站点未声明搜索能力');
     } else {
       setMessage(`已选择 ${site.name}`);
+      setActiveTab('discover');
     }
   }
 
@@ -462,347 +481,500 @@ export default function App() {
     }
   }
 
-  return (
-    <View style={styles.root}>
-      <StatusBar style="light" />
-      <KeyboardAvoidingView
-        behavior={Platform.select({ ios: 'padding', android: undefined })}
-        style={styles.keyboardRoot}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          contentInsetAdjustmentBehavior="automatic"
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.header}>
-            <Text style={styles.title}>私人播放器</Text>
-            <Text style={styles.subtitle}>直播 / 点播 / 配置接口</Text>
-          </View>
+  function renderLiveChannelList(limit = liveChannels.length) {
+    if (!liveChannels.length) {
+      return (
+        <Text style={styles.emptyText}>
+          还没有直播频道。可以导入自己的 m3u 列表，或先使用测试直播列表验证播放。
+        </Text>
+      );
+    }
 
-          <View style={styles.playerShell}>
-            <VideoView
-              allowsFullscreen
-              allowsPictureInPicture
-              contentFit="contain"
-              nativeControls
-              player={player}
-              style={styles.video}
-            />
-          </View>
-
-          <View style={styles.statusPanel}>
-            <View style={styles.statusItem}>
-              <Text style={styles.statusLabel}>当前</Text>
-              <Text style={styles.statusValue}>{currentLabel}</Text>
-            </View>
-            <View style={styles.statusDivider} />
-            <View style={styles.statusMessageGroup}>
-              <Text style={styles.statusLabel}>状态</Text>
-              <Text selectable style={styles.statusValue}>
-                {message}
+    return (
+      <View style={styles.listStack}>
+        {liveChannels.slice(0, limit).map((channel) => (
+          <Pressable
+            accessibilityRole="button"
+            key={channel.id}
+            onPress={() =>
+              playLiveChannel(channel).catch(() => setMessage('频道加载失败'))
+            }
+            style={({ pressed }) => [
+              styles.listRow,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <View style={styles.rowMain}>
+              <Text style={styles.rowTitle}>{channel.name}</Text>
+              <Text numberOfLines={1} selectable style={styles.rowMeta}>
+                {channel.group || '未分组'} · {channel.url}
               </Text>
             </View>
-          </View>
+            <Text style={styles.rowAction}>播放</Text>
+          </Pressable>
+        ))}
+      </View>
+    );
+  }
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>直链播放</Text>
-            <UrlInput
-              label="直播地址"
-              onChangeText={setLiveUrl}
-              onPress={() =>
-                playDirectUrl('live').catch(() => setMessage('直播加载失败'))
-              }
-              placeholder="https://example.com/live.m3u8"
-              value={liveUrl}
-              buttonLabel="播放直播"
-              variant="primary"
-            />
-            <UrlInput
-              label="点播地址"
-              onChangeText={setVodUrl}
-              onPress={() =>
-                playDirectUrl('vod').catch(() => setMessage('点播加载失败'))
-              }
-              placeholder="https://example.com/movie.mp4"
-              value={vodUrl}
-              buttonLabel="播放点播"
-              variant="secondary"
-            />
-            <Pressable
-              accessibilityRole="button"
-              onPress={pauseOrResume}
-              style={({ pressed }) => [
-                styles.outlineButton,
-                pressed && styles.buttonPressed,
-              ]}
+  function renderSiteList() {
+    if (!sites.length) {
+      return (
+        <Text style={styles.emptyText}>
+          还没有站点。导入 TVBox/OK 影视配置后，可搜索的站点会显示在这里。
+        </Text>
+      );
+    }
+
+    return (
+      <View style={styles.listStack}>
+        {sites.map((site) => (
+          <Pressable
+            accessibilityRole="button"
+            key={site.id}
+            onPress={() => selectSite(site)}
+            style={({ pressed }) => [
+              styles.listRow,
+              selectedSiteId === site.id && styles.listRowActive,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <View style={styles.rowMain}>
+              <Text style={styles.rowTitle}>{site.name}</Text>
+              <Text numberOfLines={1} selectable style={styles.rowMeta}>
+                {site.sourceName || '配置'} · {formatSiteType(site.type)}
+              </Text>
+              {site.unsupportedReason ? (
+                <Text selectable style={styles.warningText}>
+                  {site.unsupportedReason}
+                </Text>
+              ) : null}
+            </View>
+            <Text
+              style={[styles.badge, site.unsupportedReason && styles.badgeMuted]}
             >
-              <Text style={styles.outlineButtonText}>
-                {isPlaying ? '暂停' : '继续播放'}
-              </Text>
-            </Pressable>
-          </View>
+              {site.unsupportedReason
+                ? '插件'
+                : site.searchable
+                  ? '可搜索'
+                  : '未声明'}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    );
+  }
 
-          <View style={styles.section}>
+  function renderSearchPanel() {
+    return (
+      <View style={styles.panel}>
+        <View style={styles.panelHeader}>
+          <Text style={styles.sectionTitle}>搜索播放</Text>
+          <Text style={styles.sectionHint}>从已导入站点获取播放项</Text>
+        </View>
+
+        <View style={styles.selectedSitePanel}>
+          <Text style={styles.statusLabel}>当前站点</Text>
+          <Text style={styles.selectedSiteText}>
+            {selectedSite ? selectedSite.name : '未选择'}
+          </Text>
+          {selectedSite?.unsupportedReason ? (
+            <Text selectable style={styles.warningText}>
+              {selectedSite.unsupportedReason}
+            </Text>
+          ) : null}
+        </View>
+
+        {!sites.length ? (
+          <CompactButton onPress={() => setActiveTab('settings')} variant="plain">
+            去设置导入配置
+          </CompactButton>
+        ) : null}
+
+        <TextInput
+          autoCorrect={false}
+          onChangeText={setSearchKeyword}
+          placeholder="影片关键词"
+          placeholderTextColor="#8d96a0"
+          returnKeyType="search"
+          onSubmitEditing={searchSelectedSite}
+          style={styles.input}
+          value={searchKeyword}
+        />
+        <CompactButton
+          disabled={loadingSearch}
+          onPress={searchSelectedSite}
+          variant="accent"
+        >
+          {loadingSearch ? '搜索中' : '搜索'}
+        </CompactButton>
+
+        {searchResults.length ? (
+          <View style={styles.listStack}>
+            {searchResults.map((result) => (
+              <Pressable
+                accessibilityRole="button"
+                key={result.id}
+                onPress={() => loadDetail(result)}
+                style={({ pressed }) => [
+                  styles.resultRow,
+                  selectedResult?.id === result.id && styles.resultRowActive,
+                  pressed && styles.buttonPressed,
+                ]}
+              >
+                <View style={styles.rowMain}>
+                  <Text style={styles.rowTitle}>{result.name}</Text>
+                  {result.remarks ? (
+                    <Text style={styles.rowMeta}>{result.remarks}</Text>
+                  ) : null}
+                </View>
+                <Text style={styles.rowAction}>
+                  {loadingDetailId === result.id ? '读取中' : '列表'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
+        {selectedDetail?.playGroups?.length ? (
+          <View style={styles.playGroupList}>
+            {selectedDetail.playGroups.map((group) => (
+              <View key={group.name} style={styles.playGroup}>
+                <Text style={styles.playGroupTitle}>{group.name}</Text>
+                <View style={styles.episodeGrid}>
+                  {group.episodes.map((episode, episodeIndex) => {
+                    const episodeKey = `${group.name}-${episodeIndex}-${episode.name}`;
+
+                    return (
+                      <Pressable
+                        accessibilityRole="button"
+                        key={episodeKey}
+                        onPress={() => playEpisode(group, episode, episodeIndex)}
+                        style={({ pressed }) => [
+                          styles.episodeButton,
+                          pressed && styles.buttonPressed,
+                        ]}
+                      >
+                        <Text numberOfLines={1} style={styles.episodeButtonText}>
+                          {loadingEpisodeKey === episodeKey ? '解析中' : episode.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+
+  function renderDiscover() {
+    return (
+      <View style={styles.tabContent}>
+        <View style={styles.statsGrid}>
+          <StatTile label="直播频道" value={watchingSummary.liveChannelCount} />
+          <StatTile label="配置源" value={watchingSummary.configSourceCount} />
+          <StatTile label="可用站点" value={watchingSummary.siteCount} />
+        </View>
+
+        <View style={styles.quickGrid}>
+          <QuickAction
+            label="测试直播"
+            onPress={() =>
+              importBuiltInLivePlaylist().catch(() =>
+                setMessage('测试直播列表导入失败')
+              )
+            }
+            value="m3u"
+          />
+          <QuickAction
+            label="测试配置"
+            onPress={() =>
+              importBuiltInTestSource().catch(() => setMessage('测试源导入失败'))
+            }
+            value="TVBox"
+          />
+          <QuickAction
+            label="配置接口"
+            onPress={() => setActiveTab('settings')}
+            value="导入"
+          />
+          <QuickAction
+            label="继续播放"
+            onPress={pauseOrResume}
+            value={isPlaying ? '暂停' : '播放'}
+          />
+        </View>
+
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.sectionTitle}>直链播放</Text>
+            <Text style={styles.sectionHint}>直播或点播的最终可播放地址</Text>
+          </View>
+          <UrlInput
+            buttonLabel="播放直播"
+            label="直播地址"
+            onChangeText={setLiveUrl}
+            onPress={() =>
+              playDirectUrl('live').catch(() => setMessage('直播加载失败'))
+            }
+            placeholder="https://example.com/live.m3u8"
+            value={liveUrl}
+            variant="primary"
+          />
+          <UrlInput
+            buttonLabel="播放点播"
+            label="点播地址"
+            onChangeText={setVodUrl}
+            onPress={() =>
+              playDirectUrl('vod').catch(() => setMessage('点播加载失败'))
+            }
+            placeholder="https://example.com/movie.mp4"
+            value={vodUrl}
+            variant="secondary"
+          />
+        </View>
+
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
             <Text style={styles.sectionTitle}>直播列表</Text>
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              onChangeText={setLivePlaylistUrl}
-              placeholder="https://example.com/live.m3u"
-              placeholderTextColor="#76716b"
-              style={styles.input}
-              value={livePlaylistUrl}
-            />
-            <Pressable
-              accessibilityRole="button"
+            <Text style={styles.sectionHint}>导入 m3u 后选择频道播放</Text>
+          </View>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            onChangeText={setLivePlaylistUrl}
+            placeholder="https://example.com/live.m3u"
+            placeholderTextColor="#8d96a0"
+            style={styles.input}
+            value={livePlaylistUrl}
+          />
+          <View style={styles.buttonRow}>
+            <CompactButton
               disabled={loadingLivePlaylist}
               onPress={importLivePlaylist}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                (pressed || loadingLivePlaylist) && styles.buttonPressed,
-              ]}
+              variant="primary"
             >
-              <Text style={styles.primaryButtonText}>
-                {loadingLivePlaylist ? '导入中' : '导入直播列表'}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
+              {loadingLivePlaylist ? '导入中' : '导入列表'}
+            </CompactButton>
+            <CompactButton
               disabled={loadingLivePlaylist}
               onPress={() =>
                 importBuiltInLivePlaylist().catch(() =>
                   setMessage('测试直播列表导入失败')
                 )
               }
-              style={({ pressed }) => [
-                styles.outlineButton,
-                (pressed || loadingLivePlaylist) && styles.buttonPressed,
-              ]}
+              variant="plain"
             >
-              <Text style={styles.outlineButtonText}>使用测试直播列表</Text>
-            </Pressable>
-            {liveChannels.length ? (
-              <View style={styles.siteList}>
-                {liveChannels.map((channel) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={channel.id}
-                    onPress={() =>
-                      playLiveChannel(channel).catch(() =>
-                        setMessage('频道加载失败')
-                      )
-                    }
-                    style={({ pressed }) => [
-                      styles.siteRow,
-                      pressed && styles.buttonPressed,
-                    ]}
-                  >
-                    <View style={styles.siteMain}>
-                      <Text style={styles.siteName}>{channel.name}</Text>
-                      <Text numberOfLines={1} selectable style={styles.siteMeta}>
-                        {channel.group || '未分组'} · {channel.url}
-                      </Text>
-                    </View>
-                    <Text style={styles.resultAction}>播放</Text>
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
+              测试列表
+            </CompactButton>
           </View>
+          {renderLiveChannelList()}
+        </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>配置接口</Text>
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              onChangeText={setConfigUrl}
-              placeholder="https://example.com/tvbox.json"
-              placeholderTextColor="#76716b"
-              style={styles.input}
-              value={configUrl}
+        {renderSearchPanel()}
+      </View>
+    );
+  }
+
+  function renderWatching() {
+    return (
+      <View style={styles.tabContent}>
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.sectionTitle}>最近状态</Text>
+            <Text style={styles.sectionHint}>本机保存的播放和导入记录</Text>
+          </View>
+          <View style={styles.summaryList}>
+            <SummaryRow
+              label="当前播放"
+              value={watchingSummary.hasCurrentUrl ? '有地址' : '未播放'}
             />
-            <Pressable
-              accessibilityRole="button"
+            <SummaryRow label="直播地址" value={liveUrl || '未保存'} selectable />
+            <SummaryRow label="点播地址" value={vodUrl || '未保存'} selectable />
+            <SummaryRow
+              label="当前站点"
+              value={selectedSite ? selectedSite.name : '未选择'}
+            />
+          </View>
+          <View style={styles.buttonRow}>
+            <CompactButton onPress={pauseOrResume} variant="accent">
+              {isPlaying ? '暂停播放' : '继续播放'}
+            </CompactButton>
+            <CompactButton
+              onPress={() =>
+                playDirectUrl('live').catch(() => setMessage('直播加载失败'))
+              }
+              variant="plain"
+            >
+              播放直播
+            </CompactButton>
+          </View>
+        </View>
+
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.sectionTitle}>最近直播频道</Text>
+            <Text style={styles.sectionHint}>从已导入列表快速播放</Text>
+          </View>
+          {renderLiveChannelList(8)}
+        </View>
+
+        {currentUrl ? (
+          <View style={styles.panel}>
+            <View style={styles.panelHeader}>
+              <Text style={styles.sectionTitle}>当前地址</Text>
+              <Text style={styles.sectionHint}>长按可复制</Text>
+            </View>
+            <Text selectable style={styles.currentUrl}>
+              {currentUrl}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+
+  function renderSettings() {
+    return (
+      <View style={styles.tabContent}>
+        <View style={styles.settingsGroup}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.sectionTitle}>配置接口</Text>
+            <Text style={styles.sectionHint}>粘贴 TVBox/OK 影视 JSON URL</Text>
+          </View>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            onChangeText={setConfigUrl}
+            placeholder="https://example.com/tvbox.json"
+            placeholderTextColor="#8d96a0"
+            style={styles.input}
+            value={configUrl}
+          />
+          <View style={styles.buttonRow}>
+            <CompactButton
               disabled={loadingConfig}
               onPress={importConfigSource}
-              style={({ pressed }) => [
-                styles.accentButton,
-                (pressed || loadingConfig) && styles.buttonPressed,
-              ]}
+              variant="accent"
             >
-              <Text style={styles.accentButtonText}>
-                {loadingConfig ? '导入中' : '导入配置'}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
+              {loadingConfig ? '导入中' : '导入配置'}
+            </CompactButton>
+            <CompactButton
               disabled={loadingConfig}
               onPress={() =>
                 importBuiltInTestSource().catch(() => setMessage('测试源导入失败'))
               }
-              style={({ pressed }) => [
-                styles.outlineButton,
-                (pressed || loadingConfig) && styles.buttonPressed,
-              ]}
+              variant="plain"
             >
-              <Text style={styles.outlineButtonText}>使用测试源</Text>
-            </Pressable>
-            <Text style={styles.helperText}>
-              测试源只包含一个公开样片，用来验证搜索和播放流程。
-            </Text>
-            <SourceList sources={configSources} />
+              测试源
+            </CompactButton>
           </View>
+          <Text style={styles.helperText}>
+            测试源只包含公开样片，用来验证搜索、详情和播放流程。插件源会被识别，但当前版本不会执行第三方脚本。
+          </Text>
+          <SourceList sources={configSources} />
+        </View>
 
-          {sites.length ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>站点</Text>
-              <View style={styles.siteList}>
-                {sites.map((site) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={site.id}
-                    onPress={() => selectSite(site)}
-                    style={({ pressed }) => [
-                      styles.siteRow,
-                      selectedSiteId === site.id && styles.siteRowActive,
-                      pressed && styles.buttonPressed,
-                    ]}
-                  >
-                    <View style={styles.siteMain}>
-                      <Text style={styles.siteName}>{site.name}</Text>
-                      <Text numberOfLines={1} selectable style={styles.siteMeta}>
-                        {site.sourceName || '配置'} · {formatSiteType(site.type)}
-                      </Text>
-                      {site.unsupportedReason ? (
-                        <Text style={styles.warningText}>{site.unsupportedReason}</Text>
-                      ) : null}
-                    </View>
-                    <Text
-                      style={[
-                        styles.badge,
-                        site.unsupportedReason && styles.badgeMuted,
-                      ]}
-                    >
-                      {site.unsupportedReason
-                        ? '插件'
-                        : site.searchable
-                          ? '可搜索'
-                          : '未声明'}
-                    </Text>
-                  </Pressable>
-                ))}
+        <View style={styles.settingsGroup}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.sectionTitle}>站点</Text>
+            <Text style={styles.sectionHint}>选择一个可搜索站点后回到发现页搜索</Text>
+          </View>
+          {renderSiteList()}
+        </View>
+
+        <View style={styles.settingsGroup}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.sectionTitle}>小范围测试说明</Text>
+            <Text style={styles.sectionHint}>隐私与内容边界</Text>
+          </View>
+          <Text style={styles.privacyText}>
+            地址和配置只保存在本机。应用不内置内容源，不上传用户输入的播放地址或配置接口。所有播放源由用户自行输入和管理。
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  function renderActiveTab() {
+    if (activeTab === 'watching') {
+      return renderWatching();
+    }
+
+    if (activeTab === 'settings') {
+      return renderSettings();
+    }
+
+    return renderDiscover();
+  }
+
+  return (
+    <View style={styles.root}>
+      <StatusBar style="dark" />
+      <KeyboardAvoidingView
+        behavior={Platform.select({ ios: 'padding', android: undefined })}
+        style={styles.keyboardRoot}
+      >
+        <View style={styles.appShell}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            contentInsetAdjustmentBehavior="automatic"
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.header}>
+              <View style={styles.brandRow}>
+                <Text style={styles.brandText}>私人 IPTV</Text>
+                <Text style={styles.buildPill}>iPhone 优先</Text>
+              </View>
+              <TopTabs
+                activeTab={activeTab}
+                onChange={setActiveTab}
+                tabs={APP_TABS}
+              />
+              <View style={styles.titleBlock}>
+                <Text style={styles.title}>{activeTabMeta.label}</Text>
+                <Text style={styles.subtitle}>{activeTabMeta.description}</Text>
               </View>
             </View>
-          ) : null}
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>搜索播放</Text>
-            <View style={styles.selectedSitePanel}>
-              <Text style={styles.statusLabel}>当前站点</Text>
-              <Text style={styles.selectedSiteText}>
-                {selectedSite ? selectedSite.name : '未选择'}
-              </Text>
+            <View style={styles.playerShell}>
+              <VideoView
+                allowsFullscreen
+                allowsPictureInPicture
+                contentFit="contain"
+                nativeControls
+                player={player}
+                style={styles.video}
+              />
             </View>
-            <TextInput
-              autoCorrect={false}
-              onChangeText={setSearchKeyword}
-              placeholder="影片关键词"
-              placeholderTextColor="#76716b"
-              returnKeyType="search"
-              onSubmitEditing={searchSelectedSite}
-              style={styles.input}
-              value={searchKeyword}
-            />
-            <Pressable
-              accessibilityRole="button"
-              disabled={loadingSearch}
-              onPress={searchSelectedSite}
-              style={({ pressed }) => [
-                styles.accentButton,
-                (pressed || loadingSearch) && styles.buttonPressed,
-              ]}
-            >
-              <Text style={styles.accentButtonText}>
-                {loadingSearch ? '搜索中' : '搜索'}
-              </Text>
-            </Pressable>
 
-            {searchResults.length ? (
-              <View style={styles.resultList}>
-                {searchResults.map((result) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={result.id}
-                    onPress={() => loadDetail(result)}
-                    style={({ pressed }) => [
-                      styles.resultRow,
-                      selectedResult?.id === result.id && styles.resultRowActive,
-                      pressed && styles.buttonPressed,
-                    ]}
-                  >
-                    <View style={styles.resultTextGroup}>
-                      <Text style={styles.resultTitle}>{result.name}</Text>
-                      {result.remarks ? (
-                        <Text style={styles.resultMeta}>{result.remarks}</Text>
-                      ) : null}
-                    </View>
-                    <Text style={styles.resultAction}>
-                      {loadingDetailId === result.id ? '读取中' : '列表'}
-                    </Text>
-                  </Pressable>
-                ))}
+            <View style={styles.statusPanel}>
+              <View style={styles.statusItem}>
+                <Text style={styles.statusLabel}>当前</Text>
+                <Text style={styles.statusValue}>{currentLabel}</Text>
               </View>
-            ) : null}
-
-            {selectedDetail?.playGroups?.length ? (
-              <View style={styles.playGroupList}>
-                {selectedDetail.playGroups.map((group) => (
-                  <View key={group.name} style={styles.playGroup}>
-                    <Text style={styles.playGroupTitle}>{group.name}</Text>
-                    <View style={styles.episodeGrid}>
-                      {group.episodes.map((episode, episodeIndex) => {
-                        const episodeKey = `${group.name}-${episodeIndex}-${episode.name}`;
-
-                        return (
-                          <Pressable
-                            accessibilityRole="button"
-                            key={episodeKey}
-                            onPress={() => playEpisode(group, episode, episodeIndex)}
-                            style={({ pressed }) => [
-                              styles.episodeButton,
-                              pressed && styles.buttonPressed,
-                            ]}
-                          >
-                            <Text numberOfLines={1} style={styles.episodeButtonText}>
-                              {loadingEpisodeKey === episodeKey
-                                ? '解析中'
-                                : episode.name}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-                ))}
+              <View style={styles.statusDivider} />
+              <View style={styles.statusMessageGroup}>
+                <Text style={styles.statusLabel}>状态</Text>
+                <Text selectable style={styles.statusValue}>
+                  {message}
+                </Text>
               </View>
-            ) : null}
-          </View>
+            </View>
 
-          {currentUrl ? (
-            <Text selectable style={styles.currentUrl}>
-              {currentUrl}
-            </Text>
-          ) : null}
-
-          <View style={styles.privacyPanel}>
-            <Text style={styles.privacyTitle}>小范围测试说明</Text>
-            <Text style={styles.privacyText}>
-              地址和配置只保存在本机。应用不内置内容源，不上传用户输入的播放地址或配置接口。
-            </Text>
-          </View>
-        </ScrollView>
+            {renderActiveTab()}
+          </ScrollView>
+          <BottomTabs
+            activeTab={activeTab}
+            onChange={setActiveTab}
+            tabs={APP_TABS}
+          />
+        </View>
       </KeyboardAvoidingView>
     </View>
   );
@@ -826,28 +998,141 @@ function UrlInput({
         keyboardType="url"
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#76716b"
+        placeholderTextColor="#8d96a0"
         style={styles.input}
         value={value}
       />
-      <Pressable
-        accessibilityRole="button"
-        onPress={onPress}
-        style={({ pressed }) => [
-          variant === 'primary' ? styles.primaryButton : styles.secondaryButton,
-          pressed && styles.buttonPressed,
-        ]}
+      <CompactButton fullWidth onPress={onPress} variant={variant}>
+        {buttonLabel}
+      </CompactButton>
+    </View>
+  );
+}
+
+function CompactButton({
+  children,
+  disabled = false,
+  fullWidth = false,
+  onPress,
+  variant = 'plain',
+}) {
+  const buttonStyle = [
+    styles.compactButton,
+    fullWidth && styles.fullWidthButton,
+    variant === 'primary' && styles.primaryButton,
+    variant === 'secondary' && styles.secondaryButton,
+    variant === 'accent' && styles.accentButton,
+    disabled && styles.buttonDisabled,
+  ];
+  const textStyle = [
+    styles.compactButtonText,
+    variant === 'plain' && styles.plainButtonText,
+  ];
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [buttonStyle, pressed && styles.buttonPressed]}
+    >
+      <Text style={textStyle}>{children}</Text>
+    </Pressable>
+  );
+}
+
+function TopTabs({ activeTab, onChange, tabs }) {
+  return (
+    <View style={styles.topTabs}>
+      {tabs.map((tab) => {
+        const isActive = tab.id === activeTab;
+
+        return (
+          <Pressable
+            accessibilityRole="button"
+            key={tab.id}
+            onPress={() => onChange(tab.id)}
+            style={({ pressed }) => [
+              styles.topTab,
+              isActive && styles.topTabActive,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <Text style={[styles.topTabText, isActive && styles.topTabTextActive]}>
+              {tab.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function BottomTabs({ activeTab, onChange, tabs }) {
+  return (
+    <View style={styles.bottomTabs}>
+      {tabs.map((tab) => {
+        const isActive = tab.id === activeTab;
+
+        return (
+          <Pressable
+            accessibilityRole="button"
+            key={tab.id}
+            onPress={() => onChange(tab.id)}
+            style={({ pressed }) => [
+              styles.bottomTab,
+              isActive && styles.bottomTabActive,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <Text
+              style={[
+                styles.bottomTabText,
+                isActive && styles.bottomTabTextActive,
+              ]}
+            >
+              {tab.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function QuickAction({ label, onPress, value }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.quickAction, pressed && styles.buttonPressed]}
+    >
+      <Text style={styles.quickValue}>{value}</Text>
+      <Text style={styles.quickLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function StatTile({ label, value }) {
+  return (
+    <View style={styles.statTile}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function SummaryRow({ label, selectable = false, value }) {
+  return (
+    <View style={styles.summaryRow}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text
+        numberOfLines={selectable ? undefined : 1}
+        selectable={selectable}
+        style={styles.summaryValue}
       >
-        <Text
-          style={
-            variant === 'primary'
-              ? styles.primaryButtonText
-              : styles.secondaryButtonText
-          }
-        >
-          {buttonLabel}
-        </Text>
-      </Pressable>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -861,9 +1146,9 @@ function SourceList({ sources }) {
     <View style={styles.sourceList}>
       {sources.map((source) => (
         <View key={source.id} style={styles.sourceRow}>
-          <View style={styles.sourceTextGroup}>
-            <Text style={styles.sourceName}>{source.name}</Text>
-            <Text numberOfLines={1} selectable style={styles.sourceUrl}>
+          <View style={styles.rowMain}>
+            <Text style={styles.rowTitle}>{source.name}</Text>
+            <Text numberOfLines={1} selectable style={styles.rowMeta}>
               {source.url}
             </Text>
           </View>
@@ -923,35 +1208,93 @@ function formatSiteType(type) {
 
 const styles = StyleSheet.create({
   root: {
-    backgroundColor: '#111315',
+    backgroundColor: '#f2f4f7',
     flex: 1,
   },
   keyboardRoot: {
     flex: 1,
   },
+  appShell: {
+    flex: 1,
+  },
   scrollContent: {
     gap: 14,
-    padding: 18,
-    paddingBottom: 34,
-    paddingTop: 56,
+    padding: 16,
+    paddingBottom: 116,
+    paddingTop: 54,
   },
   header: {
-    gap: 4,
+    gap: 14,
   },
-  title: {
-    color: '#f6f2ea',
-    fontSize: 28,
+  brandRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  brandText: {
+    color: '#111827',
+    fontSize: 16,
     fontWeight: '800',
     letterSpacing: 0,
   },
-  subtitle: {
-    color: '#a79f94',
-    fontSize: 15,
+  buildPill: {
+    backgroundColor: '#e5f6f2',
+    borderColor: '#b9e7dc',
+    borderRadius: 16,
+    borderWidth: 1,
+    color: '#08735d',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0,
+    overflow: 'hidden',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  topTabs: {
+    backgroundColor: '#e8ebef',
+    borderRadius: 18,
+    flexDirection: 'row',
+    gap: 4,
+    padding: 4,
+  },
+  topTab: {
+    alignItems: 'center',
+    borderRadius: 14,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 34,
+  },
+  topTabActive: {
+    backgroundColor: '#ffffff',
+    boxShadow: '0 1px 2px rgba(17, 24, 39, 0.12)',
+  },
+  topTabText: {
+    color: '#667085',
+    fontSize: 14,
+    fontWeight: '800',
     letterSpacing: 0,
   },
+  topTabTextActive: {
+    color: '#111827',
+  },
+  titleBlock: {
+    gap: 3,
+  },
+  title: {
+    color: '#111827',
+    fontSize: 30,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  subtitle: {
+    color: '#667085',
+    fontSize: 14,
+    letterSpacing: 0,
+    lineHeight: 20,
+  },
   playerShell: {
-    backgroundColor: '#000',
-    borderColor: '#302d29',
+    backgroundColor: '#000000',
+    borderColor: '#d8dde5',
     borderRadius: 8,
     borderWidth: 1,
     overflow: 'hidden',
@@ -962,68 +1305,142 @@ const styles = StyleSheet.create({
   },
   statusPanel: {
     alignItems: 'center',
-    backgroundColor: '#1a1d1d',
-    borderColor: '#302d29',
+    backgroundColor: '#ffffff',
+    borderColor: '#dde2ea',
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 14,
-    padding: 14,
+    gap: 12,
+    padding: 12,
   },
   statusItem: {
     minWidth: 54,
   },
   statusLabel: {
-    color: '#a79f94',
+    color: '#7b8491',
     fontSize: 12,
     letterSpacing: 0,
   },
   statusValue: {
-    color: '#f6f2ea',
+    color: '#111827',
     flexShrink: 1,
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: 0,
     lineHeight: 20,
   },
   statusDivider: {
     alignSelf: 'stretch',
-    backgroundColor: '#35312d',
+    backgroundColor: '#e1e6ee',
     width: 1,
   },
   statusMessageGroup: {
     flex: 1,
     gap: 3,
   },
-  section: {
-    backgroundColor: '#1a1d1d',
-    borderColor: '#302d29',
+  tabContent: {
+    gap: 14,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  statTile: {
+    backgroundColor: '#ffffff',
+    borderColor: '#dde2ea',
+    borderRadius: 8,
+    borderWidth: 1,
+    flex: 1,
+    gap: 2,
+    minHeight: 70,
+    padding: 12,
+  },
+  statValue: {
+    color: '#0f766e',
+    fontSize: 24,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  statLabel: {
+    color: '#667085',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0,
+  },
+  quickGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  quickAction: {
+    backgroundColor: '#ffffff',
+    borderColor: '#dde2ea',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 4,
+    minHeight: 72,
+    padding: 12,
+    width: '48.5%',
+  },
+  quickValue: {
+    color: '#1d4ed8',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  quickLabel: {
+    color: '#667085',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0,
+  },
+  panel: {
+    backgroundColor: '#ffffff',
+    borderColor: '#dde2ea',
     borderRadius: 8,
     borderWidth: 1,
     gap: 12,
     padding: 14,
   },
+  settingsGroup: {
+    backgroundColor: '#ffffff',
+    borderColor: '#dde2ea',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 12,
+    padding: 14,
+  },
+  panelHeader: {
+    gap: 3,
+  },
   sectionTitle: {
-    color: '#f6f2ea',
+    color: '#111827',
     fontSize: 17,
-    fontWeight: '800',
+    fontWeight: '900',
     letterSpacing: 0,
+  },
+  sectionHint: {
+    color: '#7b8491',
+    fontSize: 12,
+    letterSpacing: 0,
+    lineHeight: 17,
   },
   inputGroup: {
     gap: 9,
   },
   inputLabel: {
-    color: '#d6cbbd',
-    fontSize: 14,
-    fontWeight: '700',
+    color: '#344054',
+    fontSize: 13,
+    fontWeight: '800',
     letterSpacing: 0,
   },
   input: {
-    backgroundColor: '#101111',
-    borderColor: '#39352f',
+    backgroundColor: '#f8fafc',
+    borderColor: '#d7dde6',
     borderRadius: 8,
     borderWidth: 1,
-    color: '#f6f2ea',
+    color: '#111827',
     fontSize: 14,
     letterSpacing: 0,
     minHeight: 48,
@@ -1031,169 +1448,82 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   helperText: {
-    color: '#a79f94',
+    color: '#667085',
     fontSize: 12,
     letterSpacing: 0,
     lineHeight: 18,
   },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#2ec4a6',
-    borderRadius: 8,
-    justifyContent: 'center',
-    minHeight: 46,
-  },
-  primaryButtonText: {
-    color: '#071411',
-    fontSize: 15,
-    fontWeight: '800',
+  emptyText: {
+    color: '#667085',
+    fontSize: 13,
     letterSpacing: 0,
+    lineHeight: 19,
   },
-  secondaryButton: {
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  compactButton: {
     alignItems: 'center',
-    backgroundColor: '#f1b35b',
-    borderRadius: 8,
-    justifyContent: 'center',
-    minHeight: 46,
-  },
-  secondaryButtonText: {
-    color: '#1a1005',
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0,
-  },
-  accentButton: {
-    alignItems: 'center',
-    backgroundColor: '#7cc7e8',
-    borderRadius: 8,
-    justifyContent: 'center',
-    minHeight: 46,
-  },
-  accentButtonText: {
-    color: '#061016',
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0,
-  },
-  outlineButton: {
-    alignItems: 'center',
-    borderColor: '#4a433b',
+    backgroundColor: '#eef2f7',
+    borderColor: '#d7dde6',
     borderRadius: 8,
     borderWidth: 1,
+    flex: 1,
     justifyContent: 'center',
     minHeight: 44,
+    paddingHorizontal: 12,
   },
-  outlineButtonText: {
-    color: '#f6f2ea',
-    fontSize: 15,
-    fontWeight: '700',
+  fullWidthButton: {
+    width: '100%',
+  },
+  primaryButton: {
+    backgroundColor: '#0f766e',
+    borderColor: '#0f766e',
+  },
+  secondaryButton: {
+    backgroundColor: '#c2410c',
+    borderColor: '#c2410c',
+  },
+  accentButton: {
+    backgroundColor: '#1d4ed8',
+    borderColor: '#1d4ed8',
+  },
+  compactButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '900',
     letterSpacing: 0,
+  },
+  plainButtonText: {
+    color: '#111827',
   },
   buttonPressed: {
     opacity: 0.72,
   },
-  sourceList: {
-    gap: 8,
+  buttonDisabled: {
+    opacity: 0.55,
   },
-  sourceRow: {
-    alignItems: 'center',
-    borderColor: '#39352f',
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 10,
-    padding: 10,
-  },
-  sourceTextGroup: {
-    flex: 1,
-    gap: 2,
-  },
-  sourceName: {
-    color: '#f6f2ea',
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0,
-  },
-  sourceUrl: {
-    color: '#a79f94',
-    fontSize: 12,
-    letterSpacing: 0,
-  },
-  siteList: {
+  listStack: {
     gap: 9,
   },
-  siteRow: {
+  listRow: {
     alignItems: 'center',
-    backgroundColor: '#111315',
-    borderColor: '#39352f',
+    backgroundColor: '#f8fafc',
+    borderColor: '#d7dde6',
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: 'row',
     gap: 10,
     padding: 12,
   },
-  siteRowActive: {
-    borderColor: '#2ec4a6',
-  },
-  siteMain: {
-    flex: 1,
-    gap: 3,
-  },
-  siteName: {
-    color: '#f6f2ea',
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0,
-  },
-  siteMeta: {
-    color: '#a79f94',
-    fontSize: 12,
-    letterSpacing: 0,
-  },
-  warningText: {
-    color: '#f1b35b',
-    fontSize: 12,
-    letterSpacing: 0,
-    lineHeight: 17,
-  },
-  badge: {
-    backgroundColor: '#23342e',
-    borderRadius: 8,
-    color: '#7ce8c8',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0,
-    minWidth: 56,
-    overflow: 'hidden',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    textAlign: 'center',
-  },
-  badgeMuted: {
-    backgroundColor: '#3a3022',
-    color: '#f1b35b',
-  },
-  selectedSitePanel: {
-    backgroundColor: '#111315',
-    borderColor: '#39352f',
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 3,
-    padding: 10,
-  },
-  selectedSiteText: {
-    color: '#f6f2ea',
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0,
-  },
-  resultList: {
-    gap: 8,
+  listRowActive: {
+    borderColor: '#0f766e',
   },
   resultRow: {
     alignItems: 'center',
-    backgroundColor: '#111315',
-    borderColor: '#39352f',
+    backgroundColor: '#f8fafc',
+    borderColor: '#d7dde6',
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: 'row',
@@ -1202,27 +1532,64 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   resultRowActive: {
-    borderColor: '#7cc7e8',
+    borderColor: '#1d4ed8',
   },
-  resultTextGroup: {
+  rowMain: {
     flex: 1,
     gap: 3,
   },
-  resultTitle: {
-    color: '#f6f2ea',
+  rowTitle: {
+    color: '#111827',
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '900',
     letterSpacing: 0,
   },
-  resultMeta: {
-    color: '#a79f94',
+  rowMeta: {
+    color: '#667085',
     fontSize: 12,
     letterSpacing: 0,
   },
-  resultAction: {
-    color: '#7cc7e8',
+  rowAction: {
+    color: '#1d4ed8',
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  warningText: {
+    color: '#b45309',
+    fontSize: 12,
+    letterSpacing: 0,
+    lineHeight: 17,
+  },
+  badge: {
+    backgroundColor: '#e5f6f2',
+    borderRadius: 8,
+    color: '#08735d',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0,
+    minWidth: 58,
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    textAlign: 'center',
+  },
+  badgeMuted: {
+    backgroundColor: '#fff4e5',
+    color: '#b45309',
+  },
+  selectedSitePanel: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#d7dde6',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 3,
+    padding: 10,
+  },
+  selectedSiteText: {
+    color: '#111827',
+    fontSize: 15,
+    fontWeight: '900',
     letterSpacing: 0,
   },
   playGroupList: {
@@ -1232,9 +1599,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   playGroupTitle: {
-    color: '#d6cbbd',
+    color: '#344054',
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '900',
     letterSpacing: 0,
   },
   episodeGrid: {
@@ -1244,8 +1611,8 @@ const styles = StyleSheet.create({
   },
   episodeButton: {
     alignItems: 'center',
-    backgroundColor: '#252829',
-    borderColor: '#39352f',
+    backgroundColor: '#eef2f7',
+    borderColor: '#d7dde6',
     borderRadius: 8,
     borderWidth: 1,
     justifyContent: 'center',
@@ -1254,36 +1621,90 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   episodeButtonText: {
-    color: '#f6f2ea',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0,
-    maxWidth: 120,
-  },
-  currentUrl: {
-    color: '#a79f94',
-    fontSize: 12,
-    letterSpacing: 0,
-    lineHeight: 18,
-  },
-  privacyPanel: {
-    backgroundColor: '#151615',
-    borderColor: '#302d29',
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 5,
-    padding: 12,
-  },
-  privacyTitle: {
-    color: '#f6f2ea',
+    color: '#111827',
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0,
+    maxWidth: 120,
   },
-  privacyText: {
-    color: '#a79f94',
+  summaryList: {
+    gap: 10,
+  },
+  summaryRow: {
+    borderBottomColor: '#eef2f7',
+    borderBottomWidth: 1,
+    gap: 4,
+    paddingBottom: 10,
+  },
+  summaryLabel: {
+    color: '#7b8491',
+    fontSize: 12,
+    letterSpacing: 0,
+  },
+  summaryValue: {
+    color: '#111827',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0,
+    lineHeight: 19,
+  },
+  currentUrl: {
+    color: '#475467',
     fontSize: 12,
     letterSpacing: 0,
     lineHeight: 18,
+  },
+  sourceList: {
+    gap: 8,
+  },
+  sourceRow: {
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderColor: '#d7dde6',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    padding: 10,
+  },
+  privacyText: {
+    color: '#475467',
+    fontSize: 13,
+    letterSpacing: 0,
+    lineHeight: 20,
+  },
+  bottomTabs: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#d7dde6',
+    borderRadius: 24,
+    borderWidth: 1,
+    bottom: 18,
+    boxShadow: '0 8px 24px rgba(17, 24, 39, 0.14)',
+    flexDirection: 'row',
+    gap: 4,
+    left: 16,
+    padding: 6,
+    position: 'absolute',
+    right: 16,
+  },
+  bottomTab: {
+    alignItems: 'center',
+    borderRadius: 18,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 42,
+  },
+  bottomTabActive: {
+    backgroundColor: '#111827',
+  },
+  bottomTabText: {
+    color: '#667085',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  bottomTabTextActive: {
+    color: '#ffffff',
   },
 });
