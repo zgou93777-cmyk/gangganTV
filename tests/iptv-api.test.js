@@ -156,7 +156,7 @@ test('network helpers include HTTP status in failures', async () => {
   );
 });
 
-test('built-in mock source supports config, search, detail, and direct playback', async () => {
+test('built-in mock source supports config, search, detail, and direct HLS playback', async () => {
   let called = false;
   const fetchImpl = async () => {
     called = true;
@@ -184,13 +184,16 @@ test('built-in mock source supports config, search, detail, and direct playback'
 
   const detail = await fetchTvBoxDetail(parsed.sites[0], 'public-sintel', fetchImpl);
   assert.equal(detail.name, 'Sintel Test Video');
-  assert.equal(detail.playGroups[0].episodes[0].name, '720p MP4');
+  assert.equal(detail.playGroups[0].episodes[0].name, 'Apple HLS');
 
   const playable = await resolveTvBoxEpisode(
     parsed.sites[0],
     detail.playGroups[0].episodes[0],
     fetchImpl
   );
-  assert.match(playable, /^https:\/\/.*\.mp4$/);
+  assert.equal(
+    playable,
+    'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8'
+  );
   assert.equal(called, false);
 });

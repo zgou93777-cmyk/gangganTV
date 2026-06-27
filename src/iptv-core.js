@@ -11,6 +11,21 @@ function isValidHttpUrl(value) {
   }
 }
 
+function getPlayableUrlIssue(value) {
+  if (!isValidHttpUrl(value)) {
+    return '播放地址需要以 http:// 或 https:// 开头';
+  }
+
+  const cleanValue = value.trim();
+  const pathname = new URL(cleanValue).pathname.toLowerCase();
+
+  if (pathname.endsWith('.m3u')) {
+    return '这是频道列表地址，不是单个视频流。请先从列表里选择具体频道的 m3u8/mp4 地址。';
+  }
+
+  return '';
+}
+
 function classifySourceUrl(value) {
   const cleanValue = typeof value === 'string' ? value.trim() : '';
   const lowerValue = cleanValue.toLowerCase();
@@ -261,6 +276,7 @@ module.exports = {
   buildTvBoxSearchUrl,
   classifySourceUrl,
   extractPlayableUrl,
+  getPlayableUrlIssue,
   isValidHttpUrl,
   normalizeDetailResponse,
   normalizeSearchResponse,

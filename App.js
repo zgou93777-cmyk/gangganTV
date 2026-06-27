@@ -16,6 +16,7 @@ import {
 
 const {
   classifySourceUrl,
+  getPlayableUrlIssue,
   isValidHttpUrl,
 } = require('./src/iptv-core');
 const {
@@ -150,6 +151,14 @@ export default function App() {
     if (!isValidHttpUrl(cleanUrl)) {
       setActiveType(type);
       setMessage(`${LABELS[type]}地址需要以 http:// 或 https:// 开头`);
+      return;
+    }
+
+    const playableIssue = getPlayableUrlIssue(cleanUrl);
+
+    if (playableIssue) {
+      setActiveType(type);
+      setMessage(playableIssue);
       return;
     }
 

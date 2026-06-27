@@ -6,6 +6,7 @@ const {
   buildTvBoxSearchUrl,
   classifySourceUrl,
   extractPlayableUrl,
+  getPlayableUrlIssue,
   isValidHttpUrl,
   normalizeDetailResponse,
   normalizeSearchResponse,
@@ -18,6 +19,15 @@ test('validates only http and https urls after trimming whitespace', () => {
   assert.equal(isValidHttpUrl('ftp://example.com/file.ts'), false);
   assert.equal(isValidHttpUrl('not a url'), false);
   assert.equal(isValidHttpUrl(''), false);
+});
+
+test('flags m3u channel lists as not directly playable video urls', () => {
+  assert.equal(
+    getPlayableUrlIssue('https://iptv.example.com/list/Gather.m3u'),
+    '这是频道列表地址，不是单个视频流。请先从列表里选择具体频道的 m3u8/mp4 地址。'
+  );
+  assert.equal(getPlayableUrlIssue('https://media.example.com/live.m3u8'), '');
+  assert.equal(getPlayableUrlIssue('https://media.example.com/movie.mp4'), '');
 });
 
 test('classifies CatVod script urls as unsupported plugin sources', () => {

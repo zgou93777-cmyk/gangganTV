@@ -11,7 +11,7 @@ const {
 const BUILT_IN_MOCK_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_MOCK_SITE_API = 'mock://demo-tvbox/api';
 const BUILT_IN_MOCK_VIDEO_URL =
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4';
+  'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8';
 
 const BUILT_IN_MOCK_CONFIG = {
   name: 'Built-in Test Source',
@@ -44,8 +44,8 @@ const BUILT_IN_MOCK_DETAIL_RESPONSE = {
       vod_name: 'Sintel Test Video',
       vod_pic: '',
       vod_remarks: 'Public sample',
-      vod_play_from: 'Public MP4',
-      vod_play_url: `720p MP4$${BUILT_IN_MOCK_VIDEO_URL}`,
+      vod_play_from: 'Public HLS',
+      vod_play_url: `Apple HLS$${BUILT_IN_MOCK_VIDEO_URL}`,
     },
   ],
 };
