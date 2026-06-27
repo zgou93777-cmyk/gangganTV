@@ -38,9 +38,67 @@ function buildWatchingSummary({
   };
 }
 
+function buildLiveChannelGroups(channels = []) {
+  const counts = new Map();
+
+  channels.forEach((channel) => {
+    const group = normalizeLiveGroup(channel?.group);
+    counts.set(group, (counts.get(group) || 0) + 1);
+  });
+
+  return [
+    {
+      id: 'all',
+      label: '全部',
+      count: channels.length,
+    },
+    ...Array.from(counts.entries()).map(([group, count]) => ({
+      id: group,
+      label: group,
+      count,
+    })),
+  ];
+}
+
+function filterLiveChannels(channels = [], { keyword = '', group = 'all' } = {}) {
+  const cleanKeyword = String(keyword).trim().toLowerCase();
+  const cleanGroup = group || 'all';
+
+  return channels.filter((channel) => {
+    const channelGroup = normalizeLiveGroup(channel?.group);
+    const matchesGroup = cleanGroup === 'all' || channelGroup === cleanGroup;
+
+    if (!matchesGroup) {
+      return false;
+    }
+
+    if (!cleanKeyword) {
+      return true;
+    }
+
+    const haystack = [
+      channel?.name,
+      channel?.group,
+      channel?.url,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    return haystack.includes(cleanKeyword);
+  });
+}
+
+function normalizeLiveGroup(group) {
+  const cleanGroup = typeof group === 'string' ? group.trim() : '';
+  return cleanGroup || '未分组';
+}
+
 module.exports = {
   APP_TABS,
   DEFAULT_TAB_ID,
+  buildLiveChannelGroups,
   buildWatchingSummary,
+  filterLiveChannels,
   getTabById,
 };

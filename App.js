@@ -31,7 +31,9 @@ const {
 const {
   APP_TABS,
   DEFAULT_TAB_ID,
+  buildLiveChannelGroups,
   buildWatchingSummary,
+  filterLiveChannels,
   getTabById,
 } = require('./src/ui-model');
 const {
@@ -75,6 +77,8 @@ export default function App() {
   const [liveUrl, setLiveUrl] = useState('');
   const [livePlaylistUrl, setLivePlaylistUrl] = useState('');
   const [liveChannels, setLiveChannels] = useState([]);
+  const [liveChannelKeyword, setLiveChannelKeyword] = useState('');
+  const [selectedLiveGroup, setSelectedLiveGroup] = useState('all');
   const [liveSourceText, setLiveSourceText] = useState('');
   const [liveSourceScanResults, setLiveSourceScanResults] = useState([]);
   const [vodUrl, setVodUrl] = useState('');
@@ -125,6 +129,18 @@ export default function App() {
 
   const activeTabMeta = useMemo(() => getTabById(activeTab), [activeTab]);
   const currentLabel = useMemo(() => LABELS[activeType] || '播放', [activeType]);
+  const liveChannelGroups = useMemo(
+    () => buildLiveChannelGroups(liveChannels),
+    [liveChannels]
+  );
+  const filteredLiveChannels = useMemo(
+    () =>
+      filterLiveChannels(liveChannels, {
+        keyword: liveChannelKeyword,
+        group: selectedLiveGroup,
+      }),
+    [liveChannelKeyword, liveChannels, selectedLiveGroup]
+  );
   const watchingSummary = useMemo(
     () =>
       buildWatchingSummary({
@@ -371,6 +387,8 @@ export default function App() {
       const channels = await fetchM3uPlaylist(cleanUrl);
 
       setLiveChannels(channels);
+      setLiveChannelKeyword('');
+      setSelectedLiveGroup('all');
       await Promise.all([
         AsyncStorage.setItem(STORAGE_KEYS.livePlaylistUrl, cleanUrl),
         saveJson(STORAGE_KEYS.liveChannels, channels),
@@ -672,7 +690,66 @@ export default function App() {
     }
   }
 
-  function renderLiveChannelList(limit = liveChannels.length) {
+  function renderLiveChannelFilters() {
+    if (!liveChannels.length) {
+      return null;
+    }
+
+    return (
+      <View style={styles.filterPanel}>
+        <TextInput
+          autoCorrect={false}
+          onChangeText={setLiveChannelKeyword}
+          placeholder="搜索频道或分组"
+          placeholderTextColor="#8d96a0"
+          returnKeyType="search"
+          style={styles.searchInput}
+          value={liveChannelKeyword}
+        />
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterScroller}
+        >
+          <View style={styles.chipRow}>
+            {liveChannelGroups.map((group) => {
+              const isActive = selectedLiveGroup === group.id;
+
+              return (
+                <Pressable
+                  accessibilityRole="button"
+                  key={group.id}
+                  onPress={() => setSelectedLiveGroup(group.id)}
+                  style={({ pressed }) => [
+                    styles.filterChip,
+                    isActive && styles.filterChipActive,
+                    pressed && styles.buttonPressed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      isActive && styles.filterChipTextActive,
+                    ]}
+                  >
+                    {group.label} {group.count}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </ScrollView>
+        <Text style={styles.helperText}>
+          当前显示 {filteredLiveChannels.length} / {liveChannels.length} 个频道
+        </Text>
+      </View>
+    );
+  }
+
+  function renderLiveChannelList(
+    limit = filteredLiveChannels.length,
+    channels = filteredLiveChannels
+  ) {
     if (!liveChannels.length) {
       return (
         <Text style={styles.emptyText}>
@@ -681,9 +758,17 @@ export default function App() {
       );
     }
 
+    if (!channels.length) {
+      return (
+        <Text style={styles.emptyText}>
+          没有匹配的直播频道。可以换个关键词，或切回“全部”分组。
+        </Text>
+      );
+    }
+
     return (
       <View style={styles.listStack}>
-        {liveChannels.slice(0, limit).map((channel) => (
+        {channels.slice(0, limit).map((channel) => (
           <Pressable
             accessibilityRole="button"
             key={channel.id}
@@ -965,6 +1050,7 @@ export default function App() {
               测试列表
             </CompactButton>
           </View>
+          {renderLiveChannelFilters()}
           {renderLiveChannelList()}
         </View>
 
@@ -1060,7 +1146,7 @@ export default function App() {
             <Text style={styles.sectionTitle}>最近直播频道</Text>
             <Text style={styles.sectionHint}>从已导入列表快速播放</Text>
           </View>
-          {renderLiveChannelList(8)}
+          {renderLiveChannelList(8, liveChannels)}
         </View>
 
         {currentUrl ? (
@@ -2105,6 +2191,47 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0,
     lineHeight: 18,
+  },
+  filterPanel: {
+    gap: 10,
+  },
+  searchInput: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d7dde6',
+    borderRadius: 22,
+    borderWidth: 1,
+    color: '#111827',
+    fontSize: 15,
+    letterSpacing: 0,
+    minHeight: 44,
+    paddingHorizontal: 16,
+  },
+  filterScroller: {
+    marginHorizontal: -2,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 2,
+  },
+  filterChip: {
+    backgroundColor: '#eef2f7',
+    borderRadius: 18,
+    minHeight: 34,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+  },
+  filterChipActive: {
+    backgroundColor: '#1d4ed8',
+  },
+  filterChipText: {
+    color: '#344054',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  filterChipTextActive: {
+    color: '#ffffff',
   },
   emptyText: {
     color: '#667085',
