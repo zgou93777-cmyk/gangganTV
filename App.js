@@ -42,6 +42,9 @@ const {
   testTvBoxSite,
   testTvBoxSites,
 } = require('./src/site-tester');
+const {
+  scanLiveSourceText,
+} = require('./src/live-source-scanner');
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
@@ -69,6 +72,8 @@ export default function App() {
   const [liveUrl, setLiveUrl] = useState('');
   const [livePlaylistUrl, setLivePlaylistUrl] = useState('');
   const [liveChannels, setLiveChannels] = useState([]);
+  const [liveSourceText, setLiveSourceText] = useState('');
+  const [liveSourceScanResults, setLiveSourceScanResults] = useState([]);
   const [vodUrl, setVodUrl] = useState('');
   const [configUrl, setConfigUrl] = useState('');
   const [configSources, setConfigSources] = useState([]);
@@ -84,6 +89,7 @@ export default function App() {
   const [message, setMessage] = useState('等待播放地址');
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [loadingLivePlaylist, setLoadingLivePlaylist] = useState(false);
+  const [scanningLiveSources, setScanningLiveSources] = useState(false);
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [loadingDetailId, setLoadingDetailId] = useState('');
   const [loadingEpisodeKey, setLoadingEpisodeKey] = useState('');
@@ -299,6 +305,38 @@ export default function App() {
   async function importBuiltInLivePlaylist() {
     setLivePlaylistUrl(BUILT_IN_TEST_LIVE_PLAYLIST_URL);
     await importLivePlaylistFromUrl(BUILT_IN_TEST_LIVE_PLAYLIST_URL);
+  }
+
+  async function scanPastedLiveSources() {
+    const cleanText = liveSourceText.trim();
+
+    if (!cleanText) {
+      setActiveType('live');
+      setLiveSourceScanResults([]);
+      setMessage('请先粘贴直播源说明或链接');
+      return;
+    }
+
+    setScanningLiveSources(true);
+    setActiveType('live');
+    setMessage('正在检测直播源链接');
+
+    try {
+      const results = await scanLiveSourceText(cleanText);
+      const readyCount = results.filter((result) => result.ok).length;
+
+      setLiveSourceScanResults(results);
+      setMessage(
+        results.length
+          ? `已检测 ${results.length} 个链接，${readyCount} 个可导入直播列表`
+          : '没有识别到 HTTP/HTTPS 链接'
+      );
+    } catch (scanError) {
+      setLiveSourceScanResults([]);
+      setMessage(scanError?.message || '直播源检测失败');
+    } finally {
+      setScanningLiveSources(false);
+    }
   }
 
   async function importLivePlaylistFromUrl(url) {
@@ -1007,6 +1045,60 @@ export default function App() {
       <View style={styles.tabContent}>
         <View style={styles.settingsGroup}>
           <View style={styles.panelHeader}>
+            <Text style={styles.sectionTitle}>直播源批量检测</Text>
+            <Text style={styles.sectionHint}>粘贴整段来源说明，自动识别 M3U、网页、配置和插件链接</Text>
+          </View>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            multiline
+            onChangeText={setLiveSourceText}
+            placeholder="可以直接粘贴包含多个直播源链接的整段文字"
+            placeholderTextColor="#8d96a0"
+            style={[styles.input, styles.multilineInput]}
+            textAlignVertical="top"
+            value={liveSourceText}
+          />
+          <View style={styles.buttonRow}>
+            <CompactButton
+              disabled={scanningLiveSources}
+              onPress={() =>
+                scanPastedLiveSources().catch(() => setMessage('直播源检测失败'))
+              }
+              variant="primary"
+            >
+              {scanningLiveSources ? '检测中' : '检测直播源'}
+            </CompactButton>
+            <CompactButton
+              disabled={scanningLiveSources}
+              onPress={() => {
+                setLiveSourceText('');
+                setLiveSourceScanResults([]);
+                setMessage('已清空直播源检测内容');
+              }}
+              variant="plain"
+            >
+              清空
+            </CompactButton>
+          </View>
+          <Text style={styles.helperText}>
+            检测只读取你粘贴的链接，不内置源；网页类入口会标记为需要浏览器打开。
+          </Text>
+          {liveSourceScanResults.length ? (
+            <LiveSourceScanResultPanel
+              onImport={(url) => {
+                setLivePlaylistUrl(url);
+                importLivePlaylistFromUrl(url).catch(() =>
+                  setMessage('直播列表导入失败')
+                );
+              }}
+              results={liveSourceScanResults}
+            />
+          ) : null}
+        </View>
+
+        <View style={styles.settingsGroup}>
+          <View style={styles.panelHeader}>
             <Text style={styles.sectionTitle}>配置接口</Text>
             <Text style={styles.sectionHint}>粘贴 TVBox/OK 影视 JSON URL</Text>
           </View>
@@ -1418,6 +1510,56 @@ function BatchSiteTestResultPanel({ batch }) {
   );
 }
 
+function LiveSourceScanResultPanel({ onImport, results }) {
+  const readyCount = results.filter((result) => result.ok).length;
+
+  return (
+    <View style={styles.siteTestPanel}>
+      <Text style={styles.siteTestTitle}>
+        直播源检测：{readyCount} 可导入 / {results.length} 已识别
+      </Text>
+      <View style={styles.listStack}>
+        {results.map((result) => (
+          <View
+            key={result.url}
+            style={[
+              styles.batchResultRow,
+              result.ok ? styles.batchResultPassed : styles.batchResultFailed,
+            ]}
+          >
+            <View style={styles.rowMain}>
+              <Text style={styles.rowTitle}>{formatLiveSourceKind(result.kind)}</Text>
+              <Text numberOfLines={2} selectable style={styles.rowMeta}>
+                {result.url}
+              </Text>
+              <Text selectable style={styles.siteTestMessage}>
+                {result.message}
+                {result.sampleName ? ` 样例：${result.sampleName}` : ''}
+              </Text>
+            </View>
+            {result.ok ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => onImport(result.url)}
+                style={({ pressed }) => [
+                  styles.inlineActionButton,
+                  pressed && styles.buttonPressed,
+                ]}
+              >
+                <Text style={styles.inlineActionText}>导入</Text>
+              </Pressable>
+            ) : (
+              <Text style={[styles.badge, styles.badgeMuted]}>
+                {formatLiveSourceStatus(result.status)}
+              </Text>
+            )}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function DiagnosticTile({ label, value }) {
   return (
     <View style={styles.diagnosticTile}>
@@ -1498,6 +1640,50 @@ function formatSiteType(type) {
 
 function formatHistoryType(type) {
   return LABELS[type] || '播放';
+}
+
+function formatLiveSourceKind(kind) {
+  if (kind === 'm3u') {
+    return 'M3U 直播列表';
+  }
+
+  if (kind === 'web') {
+    return '网页入口';
+  }
+
+  if (kind === 'config') {
+    return '配置接口';
+  }
+
+  if (kind === 'plugin') {
+    return '插件源';
+  }
+
+  return '未知链接';
+}
+
+function formatLiveSourceStatus(status) {
+  if (status === 'web-page') {
+    return '网页';
+  }
+
+  if (status === 'config-source') {
+    return '配置';
+  }
+
+  if (status === 'plugin-source') {
+    return '插件';
+  }
+
+  if (status === 'network-error') {
+    return '网络';
+  }
+
+  if (status === 'empty-playlist') {
+    return '空列表';
+  }
+
+  return '不可用';
 }
 
 const styles = StyleSheet.create({
@@ -1740,6 +1926,9 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: 12,
     paddingVertical: 11,
+  },
+  multilineInput: {
+    minHeight: 128,
   },
   helperText: {
     color: '#667085',
@@ -2038,6 +2227,21 @@ const styles = StyleSheet.create({
   batchResultFailed: {
     backgroundColor: '#fff7ed',
     borderColor: '#fed7aa',
+  },
+  inlineActionButton: {
+    alignItems: 'center',
+    backgroundColor: '#0f766e',
+    borderRadius: 8,
+    justifyContent: 'center',
+    minHeight: 34,
+    minWidth: 54,
+    paddingHorizontal: 10,
+  },
+  inlineActionText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0,
   },
   sourceList: {
     gap: 8,
