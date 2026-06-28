@@ -126,6 +126,7 @@ export default function App() {
   const [liveSourceScanResults, setLiveSourceScanResults] = useState([]);
   const [vodUrl, setVodUrl] = useState('');
   const [configUrl, setConfigUrl] = useState('');
+  const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
   const [configSourceText, setConfigSourceText] = useState('');
   const [pluginServerUrl, setPluginServerUrl] = useState('');
   const [pluginServerToken, setPluginServerToken] = useState('');
@@ -903,6 +904,7 @@ export default function App() {
 
   async function searchSelectedSite() {
     const cleanKeyword = searchKeyword.trim();
+    setSourceMenuOpen(false);
 
     if (!selectedSite) {
       setActiveType('config');
@@ -1436,6 +1438,86 @@ export default function App() {
     );
   }
 
+  function renderSourceSelector() {
+    const label = selectedSite?.name || '导入配置';
+    const menuVisible = sourceMenuOpen && activeTab === 'discover';
+
+    return (
+      <View style={styles.sourceSelectorWrap}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            if (activeTab !== 'discover') {
+              setActiveTab('discover');
+              return;
+            }
+
+            setSourceMenuOpen((value) => !value);
+          }}
+          style={({ pressed }) => [
+            styles.sourcePill,
+            pressed && styles.buttonPressed,
+          ]}
+        >
+          <Text style={styles.sourceIcon}>{menuVisible ? '⌃' : '⌄'}</Text>
+          <Text numberOfLines={1} style={styles.brandText}>
+            {label}
+          </Text>
+          <Text numberOfLines={1} style={styles.sourceMeta}>
+            {sites.length ? `${sites.length} 个源` : '本机源'}
+          </Text>
+        </Pressable>
+        {menuVisible ? (
+          <View style={styles.sourceMenu}>
+            <ScrollView showsVerticalScrollIndicator style={styles.sourceMenuScroll}>
+              {sites.length ? (
+                sites.map((site) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={site.id}
+                    onPress={() => {
+                      selectSite(site);
+                      setSourceMenuOpen(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.sourceMenuItem,
+                      selectedSiteId === site.id && styles.sourceMenuItemActive,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={styles.sourceMenuCheck}>
+                      {selectedSiteId === site.id ? '✓' : ''}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.sourceMenuText}>
+                      {site.name}
+                    </Text>
+                  </Pressable>
+                ))
+              ) : (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setSourceMenuOpen(false);
+                    setActiveTab('settings');
+                  }}
+                  style={({ pressed }) => [
+                    styles.sourceMenuItem,
+                    pressed && styles.buttonPressed,
+                  ]}
+                >
+                  <Text style={styles.sourceMenuCheck}>＋</Text>
+                  <Text numberOfLines={1} style={styles.sourceMenuText}>
+                    去设置导入配置
+                  </Text>
+                </Pressable>
+              )}
+            </ScrollView>
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+
   function renderDiscoverModeRail() {
     return (
       <ScrollView
@@ -1451,7 +1533,10 @@ export default function App() {
               <Pressable
                 accessibilityRole="button"
                 key={mode.id}
-                onPress={() => setActiveDiscoverMode(mode.id)}
+                onPress={() => {
+                  setSourceMenuOpen(false);
+                  setActiveDiscoverMode(mode.id);
+                }}
                 style={({ pressed }) => [
                   styles.discoverModeButton,
                   isActive && styles.discoverModeButtonActive,
@@ -2045,26 +2130,14 @@ export default function App() {
           >
             <View style={styles.header}>
               <View style={styles.topChrome}>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setActiveTab('settings')}
-                  style={({ pressed }) => [
-                    styles.sourcePill,
-                    pressed && styles.buttonPressed,
-                  ]}
-                >
-                  <Text style={styles.sourceIcon}>▦</Text>
-                  <Text numberOfLines={1} style={styles.brandText}>
-                    豆瓣首页
-                  </Text>
-                  <Text numberOfLines={1} style={styles.sourceMeta}>
-                    {selectedSite ? selectedSite.name : '本机源'}
-                  </Text>
-                </Pressable>
+                {renderSourceSelector()}
                 <View style={styles.headerActions}>
                   <Pressable
                     accessibilityRole="button"
-                    onPress={() => setActiveTab('settings')}
+                    onPress={() => {
+                      setSourceMenuOpen(false);
+                      setActiveTab('settings');
+                    }}
                     style={({ pressed }) => [
                       styles.circleButton,
                       pressed && styles.buttonPressed,
@@ -2075,6 +2148,7 @@ export default function App() {
                   <Pressable
                     accessibilityRole="button"
                     onPress={() => {
+                      setSourceMenuOpen(false);
                       setActiveTab('discover');
                       setActiveDiscoverMode('vod');
                     }}
@@ -3032,6 +3106,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
+    zIndex: 40,
+  },
+  sourceSelectorWrap: {
+    flex: 1,
+    position: 'relative',
+    zIndex: 50,
   },
   sourcePill: {
     alignItems: 'center',
@@ -3040,7 +3120,6 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     borderWidth: 1,
     boxShadow: '0 10px 26px rgba(0, 0, 0, 0.08)',
-    flex: 1,
     flexDirection: 'row',
     gap: 9,
     minHeight: 52,
@@ -3062,6 +3141,47 @@ const styles = StyleSheet.create({
     color: '#8e8e93',
     flexShrink: 1,
     fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0,
+  },
+  sourceMenu: {
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderColor: 'rgba(209, 213, 219, 0.84)',
+    borderRadius: 24,
+    borderWidth: 1,
+    boxShadow: '0 18px 48px rgba(15, 23, 42, 0.18)',
+    left: 0,
+    maxHeight: 520,
+    overflow: 'hidden',
+    position: 'absolute',
+    top: 60,
+    width: 318,
+    zIndex: 60,
+  },
+  sourceMenuScroll: {
+    maxHeight: 520,
+  },
+  sourceMenuItem: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 58,
+    paddingHorizontal: 18,
+  },
+  sourceMenuItemActive: {
+    backgroundColor: 'rgba(47, 128, 237, 0.12)',
+  },
+  sourceMenuCheck: {
+    color: '#111827',
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 0,
+    width: 22,
+  },
+  sourceMenuText: {
+    color: '#111827',
+    flex: 1,
+    fontSize: 21,
     fontWeight: '700',
     letterSpacing: 0,
   },
