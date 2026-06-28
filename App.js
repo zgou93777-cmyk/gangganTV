@@ -155,6 +155,9 @@ export default function App() {
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [activeType, setActiveType] = useState('live');
   const [currentUrl, setCurrentUrl] = useState('');
+  const [playerLayerOpen, setPlayerLayerOpen] = useState(false);
+  const [playerLayerTitle, setPlayerLayerTitle] = useState('');
+  const [playerLayerSource, setPlayerLayerSource] = useState('');
   const [playHistory, setPlayHistory] = useState([]);
   const [message, setMessage] = useState('等待播放地址');
   const [loadingConfig, setLoadingConfig] = useState(false);
@@ -354,6 +357,8 @@ export default function App() {
   async function playResolvedUrl(type, url, title, historyMeta = {}) {
     setActiveType(type);
     setCurrentUrl(url);
+    setPlayerLayerTitle(title);
+    setPlayerLayerSource(historyMeta.sourceName || LABELS[type] || '播放');
     setMessage('正在加载视频');
 
     await player.replaceAsync({
@@ -363,6 +368,7 @@ export default function App() {
       },
     });
     player.play();
+    setPlayerLayerOpen(true);
     await recordPlayHistory({
       type,
       title,
@@ -2605,6 +2611,57 @@ export default function App() {
     );
   }
 
+  function renderPlayerLayer() {
+    if (!playerLayerOpen) {
+      return null;
+    }
+
+    return (
+      <View style={styles.playerLayer}>
+        <StatusBar style="light" />
+        <View style={styles.playerLayerTop}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setPlayerLayerOpen(false)}
+            style={({ pressed }) => [
+              styles.playerCloseButton,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <Text style={styles.playerCloseText}>‹</Text>
+          </Pressable>
+          <View style={styles.playerLayerTitleWrap}>
+            <Text numberOfLines={1} style={styles.playerLayerTitle}>
+              {playerLayerTitle || '正在播放'}
+            </Text>
+            <Text numberOfLines={1} style={styles.playerLayerSource}>
+              {playerLayerSource || currentLabel}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.playerLandscapeFrame}>
+          {currentUrl ? (
+            <VideoView
+              allowsFullscreen
+              allowsPictureInPicture
+              contentFit="contain"
+              nativeControls
+              player={player}
+              style={styles.playerLandscapeVideo}
+            />
+          ) : (
+            <View style={styles.playerEmptyFrame}>
+              <Text style={styles.playerEmptyText}>暂无播放地址</Text>
+            </View>
+          )}
+        </View>
+        <Text selectable style={styles.playerLayerStatus}>
+          {message}
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View
       style={[
@@ -2740,6 +2797,7 @@ export default function App() {
       ) : null}
       {renderSearchOverlay()}
       {renderSourceFilterSheet()}
+      {renderPlayerLayer()}
     </View>
   );
 }
@@ -4549,6 +4607,85 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 0,
     lineHeight: 19,
+  },
+  playerLayer: {
+    backgroundColor: '#050505',
+    bottom: 0,
+    left: 0,
+    paddingHorizontal: 16,
+    paddingTop: TOP_SAFE_PADDING,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 120,
+  },
+  playerLayerTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 62,
+  },
+  playerCloseButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderRadius: 25,
+    height: 50,
+    justifyContent: 'center',
+    width: 50,
+  },
+  playerCloseText: {
+    color: '#ffffff',
+    fontSize: 42,
+    fontWeight: '300',
+    lineHeight: 45,
+  },
+  playerLayerTitleWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  playerLayerTitle: {
+    color: '#ffffff',
+    fontSize: 17,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  playerLayerSource: {
+    color: 'rgba(255, 255, 255, 0.62)',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0,
+  },
+  playerLandscapeFrame: {
+    alignItems: 'center',
+    backgroundColor: '#000000',
+    borderRadius: 12,
+    justifyContent: 'center',
+    marginTop: 24,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  playerLandscapeVideo: {
+    aspectRatio: 16 / 9,
+    width: '100%',
+  },
+  playerEmptyFrame: {
+    alignItems: 'center',
+    aspectRatio: 16 / 9,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  playerEmptyText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  playerLayerStatus: {
+    color: 'rgba(255, 255, 255, 0.74)',
+    fontSize: 13,
+    letterSpacing: 0,
+    lineHeight: 18,
+    marginTop: 16,
   },
   listStack: {
     gap: 8,
