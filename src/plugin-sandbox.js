@@ -22,6 +22,7 @@ const BLOCKED_PATTERNS = [
 ];
 
 const SHIM_COMPATIBLE_TOKENS = new Set(['localStorage', 'sessionStorage', 'process']);
+const SERVER_RUNTIME_TOKENS = new Set(['Function', 'require', 'WebSocket', 'importScripts']);
 
 function preflightPluginSandbox(scriptText) {
   const blockedTokens = detectBlockedTokens(scriptText);
@@ -73,6 +74,18 @@ function summarizeSandboxCompatibility(blockedTokens) {
       shimTokens,
       blockedTokens: [],
       message: `脚本需要兼容层：${shimTokens.join(', ')}。`,
+    };
+  }
+
+  if (hardBlockedTokens.some((token) => SERVER_RUNTIME_TOKENS.has(token))) {
+    return {
+      status: 'server-runtime-required',
+      runnable: false,
+      shimTokens,
+      blockedTokens: hardBlockedTokens,
+      message: shimTokens.length
+        ? `脚本依赖 Node/动态执行能力，需要服务端解析层：${hardBlockedTokens.join(', ')}；可本地兼容：${shimTokens.join(', ')}。`
+        : `脚本依赖 Node/动态执行能力，需要服务端解析层：${hardBlockedTokens.join(', ')}。`,
     };
   }
 

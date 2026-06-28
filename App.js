@@ -70,6 +70,11 @@ const {
 const {
   CatVodRuntimeController,
 } = require('./src/catvod-runtime');
+const {
+  fetchPluginServerDetail,
+  fetchPluginServerPlay,
+  fetchPluginServerSearch,
+} = require('./src/plugin-server-client');
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
@@ -89,6 +94,7 @@ const STORAGE_KEYS = {
   sites: 'iptv.prototype.sites',
   selectedSiteId: 'iptv.prototype.selectedSiteId',
   playHistory: 'iptv.prototype.playHistory',
+  pluginServerUrl: 'iptv.prototype.pluginServerUrl',
 };
 
 const LABELS = {
@@ -110,6 +116,7 @@ export default function App() {
   const [vodUrl, setVodUrl] = useState('');
   const [configUrl, setConfigUrl] = useState('');
   const [configSourceText, setConfigSourceText] = useState('');
+  const [pluginServerUrl, setPluginServerUrl] = useState('');
   const [configSourceScanResults, setConfigSourceScanResults] = useState([]);
   const [configSources, setConfigSources] = useState([]);
   const [sites, setSites] = useState([]);
@@ -227,6 +234,7 @@ export default function App() {
       storedSites,
       storedSelectedSiteId,
       storedPlayHistory,
+      storedPluginServerUrl,
     ] = await Promise.all([
       AsyncStorage.getItem(STORAGE_KEYS.live),
       AsyncStorage.getItem(STORAGE_KEYS.livePlaylistUrl),
@@ -237,6 +245,7 @@ export default function App() {
       AsyncStorage.getItem(STORAGE_KEYS.sites),
       AsyncStorage.getItem(STORAGE_KEYS.selectedSiteId),
       AsyncStorage.getItem(STORAGE_KEYS.playHistory),
+      AsyncStorage.getItem(STORAGE_KEYS.pluginServerUrl),
     ]);
 
     const nextSources = parseStoredArray(storedSources);
@@ -248,6 +257,7 @@ export default function App() {
     setLivePlaylistUrl(storedLivePlaylistUrl || '');
     setLiveChannels(nextLiveChannels);
     setVodUrl(storedVodUrl || '');
+    setPluginServerUrl(storedPluginServerUrl || '');
     setConfigUrl(storedConfigUrl || '');
     setConfigSources(nextSources);
     setSites(nextSites);
@@ -684,8 +694,17 @@ export default function App() {
       });
 
       setPluginVerifyResult(result);
-      if (result.sandboxPreflight?.ok && result.scriptText) {
+      if (
+        result.scriptText &&
+        (result.sandboxPreflight?.ok ||
+          result.sandboxPreflight?.compatibility?.runnable)
+      ) {
         loadCatVodExecutor(source, result.scriptText);
+      } else if (
+        result.scriptUrl &&
+        result.sandboxPreflight?.compatibility?.status === 'server-runtime-required'
+      ) {
+        loadPluginServerSite(source, result.scriptUrl);
       }
       setMessage(result.message);
     } catch (verifyError) {
@@ -721,6 +740,55 @@ export default function App() {
     setSelectedSiteId(runtimeSite.id);
     setActiveTab('discover');
     setMessage('正在加载插件执行器');
+  }
+
+  function loadPluginServerSite(source, scriptUrl) {
+    const serverSite = {
+      id: 'catvod-server-runtime',
+      siteKey: 'catvod-server-runtime',
+      name: `${source.name || 'CatVod'} 服务端插件`,
+      type: 3,
+      api: scriptUrl,
+      searchable: true,
+      unsupportedReason: '',
+      sourceId: source.id,
+      sourceName: source.name || '插件源',
+      runtime: 'catvod-server',
+      scriptUrl,
+    };
+
+    setCatVodSource({
+      ...source,
+      scriptUrl,
+    });
+    setSites(upsertById(sites, serverSite));
+    setSelectedSiteId(serverSite.id);
+    setActiveTab('discover');
+    setMessage(
+      pluginServerUrl
+        ? '已准备使用插件解析服务'
+        : '该插件需要服务端解析，请先填写插件解析服务地址'
+    );
+  }
+
+  async function savePluginServerUrl() {
+    const cleanUrl = pluginServerUrl.trim();
+
+    if (!cleanUrl) {
+      await AsyncStorage.removeItem(STORAGE_KEYS.pluginServerUrl);
+      setPluginServerUrl('');
+      setMessage('已清空插件解析服务地址');
+      return;
+    }
+
+    if (!isValidHttpUrl(cleanUrl)) {
+      setMessage('插件解析服务地址需要以 http:// 或 https:// 开头');
+      return;
+    }
+
+    await AsyncStorage.setItem(STORAGE_KEYS.pluginServerUrl, cleanUrl);
+    setPluginServerUrl(cleanUrl);
+    setMessage('已保存插件解析服务地址');
   }
 
   async function fetchCatVodText(url, options = {}) {
@@ -768,7 +836,12 @@ export default function App() {
     setMessage('正在搜索');
 
     try {
-      const results = isCatVodRuntimeActive(selectedSite)
+      const results = isPluginServerSite(selectedSite)
+        ? await fetchPluginServerSearch(
+            buildPluginServerConfig(selectedSite),
+            cleanKeyword
+          )
+        : isCatVodRuntimeActive(selectedSite)
         ? normalizeCatVodSearchResult(
             await catVodRuntimeRef.current.call('search', [cleanKeyword, false, 1])
           )
@@ -800,7 +873,12 @@ export default function App() {
     setMessage('正在读取播放列表');
 
     try {
-      const detail = isCatVodRuntimeActive(selectedSite)
+      const detail = isPluginServerSite(selectedSite)
+        ? await fetchPluginServerDetail(
+            buildPluginServerConfig(selectedSite),
+            result.id
+          )
+        : isCatVodRuntimeActive(selectedSite)
         ? normalizeCatVodDetailResult(
             await catVodRuntimeRef.current.call('detail', [result.id])
           )
@@ -828,7 +906,12 @@ export default function App() {
     setMessage('正在解析播放地址');
 
     try {
-      const playableUrl = isCatVodRuntimeActive(selectedSite)
+      const playableUrl = isPluginServerSite(selectedSite)
+        ? await fetchPluginServerPlay(buildPluginServerConfig(selectedSite), {
+            flag: group.name,
+            id: episode.url,
+          })
+        : isCatVodRuntimeActive(selectedSite)
         ? normalizeCatVodPlayResult(
             await catVodRuntimeRef.current.call('play', [
               group.name,
@@ -854,6 +937,21 @@ export default function App() {
 
   function isCatVodRuntimeActive(site) {
     return Boolean(catVodReady && catVodRuntimeRef.current && site?.id === 'catvod-runtime');
+  }
+
+  function isPluginServerSite(site) {
+    return site?.runtime === 'catvod-server';
+  }
+
+  function buildPluginServerConfig(site) {
+    if (!pluginServerUrl.trim()) {
+      throw new Error('请先在设置里填写插件解析服务地址');
+    }
+
+    return {
+      baseUrl: pluginServerUrl.trim(),
+      scriptUrl: site?.scriptUrl || site?.api,
+    };
   }
 
   function renderLiveChannelFilters() {
@@ -1547,8 +1645,26 @@ export default function App() {
             </CompactButton>
           </View>
           <Text style={styles.helperText}>
-            测试源只包含公开样片，用来验证搜索、详情和播放流程。插件源会被识别，但当前版本不会执行第三方脚本。
+            测试源只包含公开样片。插件源会先做沙盒预检；简单 JS 可本地隔离执行，Node/CSP 插件需要插件解析服务。
           </Text>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            onChangeText={setPluginServerUrl}
+            placeholder="插件解析服务，例如 https://parser.example.com"
+            placeholderTextColor="#8d96a0"
+            style={styles.input}
+            value={pluginServerUrl}
+          />
+          <CompactButton
+            onPress={() =>
+              savePluginServerUrl().catch(() => setMessage('插件解析服务保存失败'))
+            }
+            variant="secondary"
+          >
+            保存插件解析服务
+          </CompactButton>
           <TextInput
             autoCapitalize="none"
             autoCorrect={false}
@@ -2576,6 +2692,14 @@ function formatPluginVerifyStatus(value) {
 
   if (value === 'sandbox-preflight-blocked') {
     return '已阻断';
+  }
+
+  if (value === 'server-runtime-required') {
+    return '需服务端';
+  }
+
+  if (value === 'shim-required') {
+    return '需兼容层';
   }
 
   return '待验证';

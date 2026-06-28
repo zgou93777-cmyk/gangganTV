@@ -43,14 +43,14 @@ test('preflight blocks scripts that request unsafe runtime capabilities', () => 
     ok: false,
     status: 'sandbox-preflight-blocked',
     title: '沙盒预检阻断',
-    message: '脚本需要兼容层：localStorage；仍阻断：Function, require。',
+    message: '脚本依赖 Node/动态执行能力，需要服务端解析层：Function, require；可本地兼容：localStorage。',
     blockedTokens: ['Function', 'require', 'localStorage'],
     compatibility: {
-      status: 'shim-required',
+      status: 'server-runtime-required',
       runnable: false,
       shimTokens: ['localStorage'],
       blockedTokens: ['Function', 'require'],
-      message: '脚本需要兼容层：localStorage；仍阻断：Function, require。',
+      message: '脚本依赖 Node/动态执行能力，需要服务端解析层：Function, require；可本地兼容：localStorage。',
     },
     allowedApis: ['fetch', 'JSON', 'URL', 'URLSearchParams', 'TextEncoder', 'TextDecoder'],
     nextStep: '该插件源暂时不能本地执行；后续可改走服务端解析层或等待专用适配器。',
@@ -78,10 +78,22 @@ test('summarizes WebView shim requirements for bundled CatVod scripts', () => {
   ]);
 
   assert.deepEqual(summary, {
-    status: 'shim-required',
+    status: 'server-runtime-required',
     runnable: false,
     shimTokens: ['localStorage', 'process'],
     blockedTokens: ['Function', 'require', 'WebSocket'],
-    message: '脚本需要兼容层：localStorage, process；仍阻断：Function, require, WebSocket。',
+    message: '脚本依赖 Node/动态执行能力，需要服务端解析层：Function, require, WebSocket；可本地兼容：localStorage, process。',
   });
+});
+
+test('classifies node builtin requires as server runtime requirements', () => {
+  const result = preflightPluginSandbox(`
+    const { EventEmitter } = require('node:events');
+    const { format } = require('node:util');
+    const make = Function('return 1');
+  `);
+
+  assert.equal(result.compatibility.status, 'server-runtime-required');
+  assert.equal(result.compatibility.runnable, false);
+  assert.deepEqual(result.compatibility.blockedTokens, ['Function', 'require']);
 });
