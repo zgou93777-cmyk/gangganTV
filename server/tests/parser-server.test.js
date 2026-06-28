@@ -177,6 +177,36 @@ test('server returns clear runner errors without crashing', async () => {
   });
 });
 
+test('server exposes tvbox runtime unavailable errors through facade routes', async () => {
+  const server = createParserServer({
+    runner: fixedRunner(),
+    tvBoxRunner: {
+      async search() {
+        throw Object.assign(new Error('TVBox runtime is not connected.'), {
+          code: 'TVBOX_RUNTIME_UNAVAILABLE',
+          statusCode: 503,
+        });
+      },
+    },
+  });
+
+  const response = await server.inject({
+    body: {
+      configUrl: 'https://example.com/wex.json',
+      siteKey: 'Wexwencai',
+      keyword: '疯迷',
+    },
+    method: 'POST',
+    path: '/tvbox/search',
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.deepEqual(response.json(), {
+    error: 'TVBOX_RUNTIME_UNAVAILABLE',
+    message: 'TVBox runtime is not connected.',
+  });
+});
+
 function fixedRunner() {
   return {
     async detail() {

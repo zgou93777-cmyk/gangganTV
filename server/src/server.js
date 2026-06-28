@@ -3,6 +3,9 @@ const http = require('node:http');
 const {
   CatVodRunner,
 } = require('./catvod-runner');
+const {
+  TvBoxRunner,
+} = require('./tvbox-runner');
 
 const JSON_HEADERS = {
   'access-control-allow-headers': 'authorization, content-type',
@@ -14,6 +17,8 @@ const JSON_HEADERS = {
 function createParserServer(options = {}) {
   const token = String(options.token || '').trim();
   const runner = options.runner || new CatVodRunner(options.runnerOptions);
+  const tvBoxRunner =
+    options.tvBoxRunner || new TvBoxRunner(options.tvBoxRunnerOptions);
   const routes = new Map();
 
   routes.set('GET /health', async () => ({
@@ -38,6 +43,15 @@ function createParserServer(options = {}) {
       id: request.body?.id,
       scriptUrl: request.body?.scriptUrl,
     })
+  ));
+  routes.set('POST /tvbox/search', withAuth(token, async (request) =>
+    tvBoxRunner.search(request.body || {})
+  ));
+  routes.set('POST /tvbox/detail', withAuth(token, async (request) =>
+    tvBoxRunner.detail(request.body || {})
+  ));
+  routes.set('POST /tvbox/play', withAuth(token, async (request) =>
+    tvBoxRunner.play(request.body || {})
   ));
 
   async function handle(rawRequest, rawResponse) {
