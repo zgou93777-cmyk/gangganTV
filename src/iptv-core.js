@@ -221,15 +221,22 @@ function normalizeSite(site, index) {
 
   const siteKey = readableText(site.key) || `${readableText(site.name) || 'site'}-${index}`;
 
-  return {
+  const normalizedSite = {
     id: siteKey,
     siteKey,
     name: readableText(site.name) || readableText(site.key) || `站点 ${index + 1}`,
     type,
     api,
     searchable: isTruthyFlag(site.searchable),
-    unsupportedReason: isPlugin ? '插件站点暂不执行第三方脚本' : '',
+    unsupportedReason: '',
   };
+
+  if (isPlugin) {
+    normalizedSite.runtime = 'catvod-server';
+    normalizedSite.scriptUrl = api;
+  }
+
+  return normalizedSite;
 }
 
 function withUniqueSiteId(site, seenSiteIds) {

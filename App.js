@@ -253,7 +253,7 @@ export default function App() {
     ]);
 
     const nextSources = parseStoredArray(storedSources);
-    const nextSites = parseStoredArray(storedSites);
+    const nextSites = normalizeStoredSites(parseStoredArray(storedSites));
     const nextLiveChannels = parseStoredArray(storedLiveChannels);
     const nextPlayHistory = normalizePlayHistory(parseStoredArray(storedPlayHistory));
 
@@ -563,6 +563,7 @@ export default function App() {
         ...site,
         id: `${source.id}#${site.id}`,
         siteKey: site.siteKey || site.id,
+        scriptUrl: site.runtime === 'catvod-server' ? source.url : site.scriptUrl,
         sourceId: source.id,
         sourceName: source.name,
       }));
@@ -969,7 +970,7 @@ export default function App() {
     return {
       baseUrl: pluginServerUrl.trim(),
       token: pluginServerToken.trim(),
-      scriptUrl: site?.scriptUrl || site?.api,
+      scriptUrl: firstValidHttpUrl([site?.scriptUrl, site?.sourceId, site?.api]),
     };
   }
 
@@ -2556,6 +2557,34 @@ function parseStoredArray(value) {
 
 function saveJson(key, value) {
   return AsyncStorage.setItem(key, JSON.stringify(value));
+}
+
+function normalizeStoredSites(items) {
+  return items.map((site) => {
+    if (!isPluginLikeSite(site)) {
+      return site;
+    }
+
+    return {
+      ...site,
+      runtime: 'catvod-server',
+      scriptUrl: isValidHttpUrl(site.scriptUrl || '')
+        ? site.scriptUrl
+        : isValidHttpUrl(site.sourceId || '')
+        ? site.sourceId
+        : site.scriptUrl || site.api,
+      unsupportedReason: '',
+    };
+  });
+}
+
+function isPluginLikeSite(site) {
+  const api = String(site?.api || site?.scriptUrl || '').trim().toLowerCase();
+  return Number(site?.type) === 3 || /^csp_/i.test(api) || api.includes('.js');
+}
+
+function firstValidHttpUrl(values) {
+  return values.find((value) => isValidHttpUrl(value || '')) || '';
 }
 
 function upsertById(items, nextItem) {

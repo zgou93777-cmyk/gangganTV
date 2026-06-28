@@ -93,7 +93,7 @@ test('scanConfigSourceText classifies TVBox configs, plugin sources, invalid url
         ok: true,
         status: 'ready',
         siteCount: 2,
-        searchableCount: 1,
+        searchableCount: 2,
         pluginCount: 1,
       },
       {

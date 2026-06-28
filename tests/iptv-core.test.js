@@ -86,7 +86,7 @@ test('classifies the built-in mock source as a config source', () => {
   });
 });
 
-test('parses TVBox config sites and marks searchable plugin sites as unsupported', () => {
+test('parses TVBox config sites and routes searchable plugin sites to the server parser', () => {
   const parsed = parseTvBoxConfig(
     {
       name: '测试配置',
@@ -124,7 +124,9 @@ test('parses TVBox config sites and marks searchable plugin sites as unsupported
     searchable: true,
     unsupportedReason: '',
   });
-  assert.equal(parsed.sites[1].unsupportedReason, '插件站点暂不执行第三方脚本');
+  assert.equal(parsed.sites[1].runtime, 'catvod-server');
+  assert.equal(parsed.sites[1].scriptUrl, 'csp_Demo');
+  assert.equal(parsed.sites[1].unsupportedReason, '');
 });
 
 test('builds a config diagnostic summary for imported sources and sites', () => {
