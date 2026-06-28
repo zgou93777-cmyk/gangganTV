@@ -6,7 +6,25 @@ const {
 } = require('./iptv-core');
 
 function normalizeCatVodSearchResult(payload) {
-  return normalizeSearchResponse(parseMaybeJson(payload));
+  const parsed = parseMaybeJson(payload);
+  const normalizedResults = normalizeSearchResponse(parsed);
+  const rawList = Array.isArray(parsed?.list) ? parsed.list : [];
+
+  return normalizedResults.map((result, index) => {
+    const rawItem = rawList[index] || {};
+    const sourceId = readableText(
+      rawItem.source_key || rawItem.source_api || rawItem.source_name
+    );
+    const sourceName = readableText(rawItem.source_name || rawItem.source_key);
+    const sourceApi = readableText(rawItem.source_api);
+
+    return {
+      ...result,
+      ...(sourceId ? { sourceId } : {}),
+      ...(sourceName ? { sourceName } : {}),
+      ...(sourceApi ? { sourceApi } : {}),
+    };
+  });
 }
 
 function normalizeCatVodDetailResult(payload) {
@@ -130,6 +148,14 @@ function parseMaybeJson(value) {
 
 function escapeScriptText(value) {
   return String(value || '').replace(/<\/script/gi, '<\\/script');
+}
+
+function readableText(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  return String(value).trim();
 }
 
 module.exports = {

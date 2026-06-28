@@ -43,3 +43,26 @@ test('filterResultsByBucket returns all results or one source only', () => {
   assert.equal(filterResultsByBucket(results, 'all').length, 2);
   assert.deepEqual(filterResultsByBucket(results, 'B'), [{ id: '2', sourceId: 'B' }]);
 });
+
+test('buildSearchBuckets creates source buckets from CatVod result metadata', () => {
+  const buckets = buildSearchBuckets({
+    results: [
+      { id: '1', sourceId: 'wen-cai', sourceName: '文才秒播' },
+      { id: '2', sourceId: 'wen-cai', sourceName: '文才秒播' },
+      { id: '3', sourceId: 'hu-ban', sourceName: '虎斑 4K' },
+    ],
+  });
+
+  assert.deepEqual(
+    buckets.map((bucket) => ({
+      count: bucket.count,
+      id: bucket.id,
+      label: bucket.label,
+    })),
+    [
+      { count: 3, id: 'all', label: '全部' },
+      { count: 2, id: 'wen-cai', label: '文才秒播' },
+      { count: 1, id: 'hu-ban', label: '虎斑 4K' },
+    ]
+  );
+});

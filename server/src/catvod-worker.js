@@ -182,6 +182,8 @@ async function callBundleServerHost(context, method, payload) {
   }
 
   if (method === 'search') {
+    const mergedList = [];
+
     for (const site of sites) {
       const siteBasePath = String(site.api || '').replace(/\/+$/, '');
       const request = routeRequest(method, payload);
@@ -197,16 +199,14 @@ async function callBundleServerHost(context, method, payload) {
       }
 
       if ((value?.list || []).length) {
-        return {
-          called: true,
-          value: wrapBundleResult(method, value, siteBasePath),
-        };
+        const wrapped = wrapBundleResult(method, value, siteBasePath, site);
+        mergedList.push(...(wrapped.list || []));
       }
     }
 
     return {
       called: true,
-      value: { list: [] },
+      value: { list: mergedList },
     };
   }
 
@@ -286,13 +286,16 @@ function routeRequest(method, payload) {
   };
 }
 
-function wrapBundleResult(method, value, siteBasePath) {
+function wrapBundleResult(method, value, siteBasePath, site = null) {
   if (method === 'search') {
     return {
       ...value,
-      list: (value?.list || []).map((item) => ({
+      list: (value?.list || []).slice(0, 30).map((item) => ({
         ...item,
         vod_id: encodeBundleToken(siteBasePath, item?.vod_id),
+        source_api: siteBasePath,
+        source_key: site?.key || '',
+        source_name: site?.name || site?.key || siteBasePath,
       })),
     };
   }

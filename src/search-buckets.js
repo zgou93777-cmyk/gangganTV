@@ -1,5 +1,6 @@
 function buildSearchBuckets({ sites = [], results = [], failures = [] } = {}) {
   const resultCounts = new Map();
+  const resultSourceLabels = new Map();
 
   results.forEach((result) => {
     const sourceId = result?.sourceId || '';
@@ -8,6 +9,9 @@ function buildSearchBuckets({ sites = [], results = [], failures = [] } = {}) {
     }
 
     resultCounts.set(sourceId, (resultCounts.get(sourceId) || 0) + 1);
+    if (!resultSourceLabels.has(sourceId) && result?.sourceName) {
+      resultSourceLabels.set(sourceId, result.sourceName);
+    }
   });
 
   const buckets = [
@@ -29,6 +33,20 @@ function buildSearchBuckets({ sites = [], results = [], failures = [] } = {}) {
     buckets.push({
       id: site.id,
       label: site.name || site.id,
+      count,
+      total: count,
+      status: 'ready',
+    });
+  });
+
+  resultCounts.forEach((count, sourceId) => {
+    if (sites.some((site) => site.id === sourceId)) {
+      return;
+    }
+
+    buckets.push({
+      id: sourceId,
+      label: resultSourceLabels.get(sourceId) || sourceId,
       count,
       total: count,
       status: 'ready',

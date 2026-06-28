@@ -16,6 +16,7 @@ test('normalizes CatVod search lists into app search results', () => {
         vod_name: '三体',
         vod_pic: 'https://img.example.com/1.jpg',
         vod_remarks: '更新至 8',
+        source_name: '文才秒播',
       },
     ],
   });
@@ -26,6 +27,8 @@ test('normalizes CatVod search lists into app search results', () => {
       name: '三体',
       poster: 'https://img.example.com/1.jpg',
       remarks: '更新至 8',
+      sourceId: '文才秒播',
+      sourceName: '文才秒播',
     },
   ]);
 });
