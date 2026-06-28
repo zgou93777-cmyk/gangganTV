@@ -13,6 +13,7 @@ import {
   Text,
   TextInput,
   View,
+  StatusBar as NativeStatusBar,
 } from 'react-native';
 
 const {
@@ -59,6 +60,11 @@ const {
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
+const TOP_SAFE_PADDING = Platform.select({
+  ios: 54,
+  android: (NativeStatusBar.currentHeight || 0) + 18,
+  default: 36,
+});
 
 const STORAGE_KEYS = {
   live: 'iptv.prototype.recentLiveUrl',
@@ -2289,8 +2295,8 @@ const styles = StyleSheet.create({
   scrollContent: {
     gap: 14,
     padding: 16,
-    paddingBottom: 158,
-    paddingTop: 28,
+    paddingBottom: 210,
+    paddingTop: TOP_SAFE_PADDING,
   },
   header: {
     gap: 10,
@@ -3049,14 +3055,14 @@ const styles = StyleSheet.create({
   pluginDiagnostic: {
     backgroundColor: '#fff7ed',
     borderColor: '#fed7aa',
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    gap: 7,
-    padding: 10,
-  },
-  pluginDiagnosticCompact: {
     gap: 5,
     padding: 8,
+  },
+  pluginDiagnosticCompact: {
+    gap: 4,
+    padding: 7,
   },
   pluginDiagnosticHeader: {
     alignItems: 'center',
@@ -3067,60 +3073,60 @@ const styles = StyleSheet.create({
   pluginDiagnosticTitle: {
     color: '#111111',
     flex: 1,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '900',
     letterSpacing: 0,
   },
   pluginDiagnosticBadge: {
     backgroundColor: '#ffedd5',
-    borderRadius: 10,
+    borderRadius: 9,
     color: '#c2410c',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '900',
     letterSpacing: 0,
     overflow: 'hidden',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
   pluginDiagnosticText: {
     color: '#7c2d12',
-    fontSize: 12,
+    fontSize: 11,
     letterSpacing: 0,
-    lineHeight: 17,
+    lineHeight: 16,
   },
   pluginDiagnosticNext: {
     color: '#9a3412',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0,
-    lineHeight: 17,
+    lineHeight: 16,
   },
   pluginDiagnosticStack: {
-    gap: 8,
+    gap: 6,
   },
   pluginDiagnosticMore: {
     color: '#9a3412',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0,
   },
   capabilityRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 5,
   },
   capabilityPill: {
     backgroundColor: '#fef3c7',
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    borderRadius: 9,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
   capabilityPillKnown: {
     backgroundColor: '#dcfce7',
   },
   capabilityText: {
     color: '#92400e',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0,
   },
