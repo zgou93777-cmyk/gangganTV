@@ -76,6 +76,11 @@ const {
   fetchPluginServerPlay,
   fetchPluginServerSearch,
 } = require('./src/plugin-server-client');
+const {
+  fetchTvBoxServerDetail,
+  fetchTvBoxServerPlay,
+  fetchTvBoxServerSearch,
+} = require('./src/tvbox-server-client');
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
@@ -897,7 +902,12 @@ export default function App() {
     setMessage('正在搜索');
 
     try {
-      const results = isPluginServerSite(selectedSite)
+      const results = isTvBoxSpiderSite(selectedSite)
+        ? await fetchTvBoxServerSearch(
+            buildTvBoxServerConfig(selectedSite),
+            cleanKeyword
+          )
+        : isPluginServerSite(selectedSite)
         ? await fetchPluginServerSearch(
             buildPluginServerConfig(selectedSite),
             cleanKeyword
@@ -934,7 +944,12 @@ export default function App() {
     setMessage('正在读取播放列表');
 
     try {
-      const detail = isPluginServerSite(selectedSite)
+      const detail = isTvBoxSpiderSite(selectedSite)
+        ? await fetchTvBoxServerDetail(
+            buildTvBoxServerConfig(selectedSite),
+            result.id
+          )
+        : isPluginServerSite(selectedSite)
         ? await fetchPluginServerDetail(
             buildPluginServerConfig(selectedSite),
             result.id
@@ -967,7 +982,12 @@ export default function App() {
     setMessage('正在解析播放地址');
 
     try {
-      const playableUrl = isPluginServerSite(selectedSite)
+      const playableUrl = isTvBoxSpiderSite(selectedSite)
+        ? await fetchTvBoxServerPlay(buildTvBoxServerConfig(selectedSite), {
+            flag: group.name,
+            id: episode.url,
+          })
+        : isPluginServerSite(selectedSite)
         ? await fetchPluginServerPlay(buildPluginServerConfig(selectedSite), {
             flag: group.name,
             id: episode.url,
@@ -1002,6 +1022,23 @@ export default function App() {
 
   function isPluginServerSite(site) {
     return site?.runtime === 'catvod-server';
+  }
+
+  function isTvBoxSpiderSite(site) {
+    return site?.runtime === 'tvbox-jar-spider';
+  }
+
+  function buildTvBoxServerConfig(site) {
+    if (!pluginServerUrl.trim()) {
+      throw new Error('请先在设置里填写解析服务地址');
+    }
+
+    return {
+      baseUrl: pluginServerUrl.trim(),
+      token: pluginServerToken.trim(),
+      configUrl: site?.sourceId || site?.configUrl,
+      siteKey: site?.siteKey || site?.id,
+    };
   }
 
   function buildPluginServerConfig(site) {
@@ -2635,11 +2672,9 @@ function normalizeStoredSites(items) {
     if (isTvBoxCspSite(site)) {
       return {
         ...site,
-        runtime: 'tvbox-csp',
-        searchable: false,
-        unsupportedReason:
-          site.unsupportedReason ||
-          'TVBox/CSP JAR 插件站点暂不兼容，当前版本只支持 CatVod JS 插件源和普通 JSON API 站点',
+        runtime: 'tvbox-jar-spider',
+        searchable: site.searchable !== false,
+        unsupportedReason: '',
       };
     }
 

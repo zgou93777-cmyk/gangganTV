@@ -105,6 +105,23 @@ test('fetchTvBoxSearch rejects unsupported plugin sites with a clear message', a
   );
 });
 
+test('fetchTvBoxSearch does not reject TVBox Spider sites as unsupported plugins', async () => {
+  await assert.rejects(
+    () =>
+      fetchTvBoxSearch(
+        {
+          api: 'csp_WexwencaiGuard',
+          runtime: 'tvbox-jar-spider',
+          searchable: true,
+          unsupportedReason: '',
+        },
+        '疯迷',
+        async () => jsonResponse({})
+      ),
+    /站点 API 不是有效 HTTP 地址/
+  );
+});
+
 test('fetchTvBoxDetail returns normalized play groups', async () => {
   const detail = await fetchTvBoxDetail(
     { api: 'https://api.example.com/tvbox' },
