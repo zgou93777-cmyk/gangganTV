@@ -93,8 +93,8 @@ test('scanConfigSourceText classifies TVBox configs, plugin sources, invalid url
         ok: true,
         status: 'ready',
         siteCount: 2,
-        searchableCount: 1,
-        pluginCount: 1,
+        searchableCount: 2,
+        pluginCount: 0,
       },
       {
         input: 'https://plugin.example.com/cat/index.js.md5',
@@ -138,7 +138,7 @@ test('scanConfigSourceText classifies TVBox configs, plugin sources, invalid url
   assert.equal(results[3].pluginDiagnostic.compatibility, 'repair-needed');
 });
 
-test('scanConfigSourceText explains configs that only contain plugin sites', async () => {
+test('scanConfigSourceText explains configs that only contain TVBox Spider sites', async () => {
   const results = await scanConfigSourceText('https://config.example.com/plugin-only.json', {
     fetchImpl: async () =>
       jsonResponse({
@@ -155,13 +155,12 @@ test('scanConfigSourceText explains configs that only contain plugin sites', asy
 
   assert.equal(results[0].ok, true);
   assert.equal(results[0].siteCount, 1);
-  assert.equal(results[0].searchableCount, 0);
-  assert.equal(results[0].pluginCount, 1);
-  assert.equal(results[0].pluginDiagnostics.length, 1);
-  assert.equal(results[0].pluginDiagnostics[0].compatibility, 'requires-adapter');
+  assert.equal(results[0].searchableCount, 1);
+  assert.equal(results[0].pluginCount, 0);
+  assert.equal(results[0].pluginDiagnostics.length, 0);
   assert.equal(
     results[0].message,
-    '可导入配置，识别到 1 个站点；但都是插件源，当前版本只展示，不执行本地搜索。'
+    '可导入配置，识别到 1 个站点；其中 1 个 TVBox Spider 源需要解析服务适配。'
   );
 });
 

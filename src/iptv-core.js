@@ -155,7 +155,7 @@ function parseTvBoxConfig(config, sourceUrl, importedAt) {
 
   const seenSiteIds = new Map();
   const sites = config.sites
-    .map((site, index) => normalizeSite(site, index))
+    .map((site, index) => normalizeSite(site, index, config))
     .map((site) => withUniqueSiteId(site, seenSiteIds))
     .filter(Boolean);
 
@@ -169,6 +169,7 @@ function parseTvBoxConfig(config, sourceUrl, importedAt) {
       name: readableText(config.name) || hostnameFromUrl(sourceUrl) || '配置接口',
       url: sourceUrl,
       importedAt,
+      spider: readableText(config.spider),
     },
     sites,
   };
@@ -177,7 +178,8 @@ function parseTvBoxConfig(config, sourceUrl, importedAt) {
 function buildConfigDiagnostics({ sources = [], sites = [] } = {}) {
   const configSourceCount = sources.filter((source) => source.kind !== 'plugin').length;
   const pluginSourceCount = sources.filter((source) => source.kind === 'plugin').length;
-  const pluginSites = sites.filter((site) => site.type === 3 || site.unsupportedReason).length;
+  const runtimeSites = sites.filter((site) => site.runtime === 'tvbox-jar-spider').length;
+  const pluginSites = sites.filter((site) => site.runtime === 'catvod-server').length;
   const unsupportedSites = sites.filter((site) => site.unsupportedReason).length;
   const searchableSites = sites.filter(
     (site) => site.searchable && !site.unsupportedReason
@@ -196,21 +198,42 @@ function buildConfigDiagnostics({ sources = [], sites = [] } = {}) {
     searchableSites,
     nonSearchableSites,
     pluginSites,
+    runtimeSites,
     unsupportedSites,
     status,
-    summary: buildConfigDiagnosticsSummary(totalSites, searchableSites, pluginSites),
+    summary: buildConfigDiagnosticsSummary(
+      totalSites,
+      searchableSites,
+      pluginSites,
+      runtimeSites
+    ),
   };
 }
 
-function buildConfigDiagnosticsSummary(totalSites, searchableSites, pluginSites) {
+function buildConfigDiagnosticsSummary(
+  totalSites,
+  searchableSites,
+  pluginSites,
+  runtimeSites
+) {
   if (totalSites === 0) {
     return '还没有导入可识别站点';
   }
 
-  return `已导入 ${totalSites} 个站点，${searchableSites} 个可搜索，${pluginSites} 个插件/不兼容`;
+  const parts = [`已导入 ${totalSites} 个站点`, `${searchableSites} 个可搜索`];
+
+  if (runtimeSites > 0) {
+    parts.push(`TVBox Spider ${runtimeSites} 个`);
+  }
+
+  if (pluginSites > 0) {
+    parts.push(`${pluginSites} 个 CatVod JS`);
+  }
+
+  return parts.join('，');
 }
 
-function normalizeSite(site, index) {
+function normalizeSite(site, index, config = {}) {
   if (!site || typeof site !== 'object') {
     return null;
   }
@@ -219,6 +242,7 @@ function normalizeSite(site, index) {
   const type = Number.isFinite(Number(site.type)) ? Number(site.type) : 0;
   const isCatVodScript = isCatVodScriptUrl(api);
   const isTvBoxCsp = type === 3 || /^csp_/i.test(api);
+  const configSpider = readableText(config.spider);
 
   const siteKey = readableText(site.key) || `${readableText(site.name) || 'site'}-${index}`;
 
@@ -228,7 +252,7 @@ function normalizeSite(site, index) {
     name: readableText(site.name) || readableText(site.key) || `站点 ${index + 1}`,
     type,
     api,
-    searchable: isTruthyFlag(site.searchable),
+    searchable: isTruthyFlagWithDefault(site.searchable, false),
     unsupportedReason: '',
   };
 
@@ -236,11 +260,14 @@ function normalizeSite(site, index) {
     normalizedSite.runtime = 'catvod-server';
     normalizedSite.scriptUrl = api;
   } else if (isTvBoxCsp) {
-    normalizedSite.runtime = 'tvbox-csp';
+    normalizedSite.runtime = 'tvbox-jar-spider';
     normalizedSite.scriptUrl = api;
-    normalizedSite.searchable = false;
-    normalizedSite.unsupportedReason =
-      'TVBox/CSP JAR 插件站点暂不兼容，当前版本只支持 CatVod JS 插件源和普通 JSON API 站点';
+    normalizedSite.configSpider = configSpider;
+    normalizedSite.jar = readableText(site.jar);
+    normalizedSite.ext = readableText(site.ext);
+    normalizedSite.changeable = isTruthyFlag(site.changeable);
+    normalizedSite.searchable = isTruthyFlagWithDefault(site.searchable, true);
+    normalizedSite.unsupportedReason = '';
   }
 
   return normalizedSite;
@@ -415,6 +442,14 @@ function isTruthyFlag(value) {
   }
 
   return false;
+}
+
+function isTruthyFlagWithDefault(value, defaultValue) {
+  if (value === undefined || value === null || value === '') {
+    return defaultValue;
+  }
+
+  return isTruthyFlag(value);
 }
 
 function isCatVodScriptUrl(value) {

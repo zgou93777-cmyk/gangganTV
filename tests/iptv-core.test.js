@@ -86,10 +86,11 @@ test('classifies the built-in mock source as a config source', () => {
   });
 });
 
-test('parses TVBox config sites and marks csp plugin sites as adapter-required', () => {
+test('parses TVBox config sites and keeps csp sites as TVBox Spider sources', () => {
   const parsed = parseTvBoxConfig(
     {
       name: '测试配置',
+      spider: 'https://example.com/spider.jar;md5;abc',
       sites: [
         {
           key: 'demo',
@@ -104,6 +105,8 @@ test('parses TVBox config sites and marks csp plugin sites as adapter-required',
           type: 3,
           api: 'csp_Demo',
           searchable: 1,
+          changeable: 1,
+          ext: 'demo-ext',
         },
       ],
     },
@@ -124,10 +127,34 @@ test('parses TVBox config sites and marks csp plugin sites as adapter-required',
     searchable: true,
     unsupportedReason: '',
   });
-  assert.equal(parsed.sites[1].runtime, 'tvbox-csp');
+  assert.equal(parsed.source.spider, 'https://example.com/spider.jar;md5;abc');
+  assert.equal(parsed.sites[1].runtime, 'tvbox-jar-spider');
   assert.equal(parsed.sites[1].scriptUrl, 'csp_Demo');
-  assert.equal(parsed.sites[1].searchable, false);
-  assert.match(parsed.sites[1].unsupportedReason, /TVBox\/CSP/);
+  assert.equal(parsed.sites[1].searchable, true);
+  assert.equal(parsed.sites[1].unsupportedReason, '');
+  assert.equal(parsed.sites[1].configSpider, 'https://example.com/spider.jar;md5;abc');
+  assert.equal(parsed.sites[1].ext, 'demo-ext');
+  assert.equal(parsed.sites[1].changeable, true);
+});
+
+test('defaults TVBox csp searchable to true when omitted', () => {
+  const parsed = parseTvBoxConfig(
+    {
+      sites: [
+        {
+          key: 'Wexwencai',
+          name: '🌺文才┃秒播🌺',
+          type: 3,
+          api: 'csp_WexwencaiGuard',
+        },
+      ],
+    },
+    'https://config.example.com/wex.json',
+    '2026-06-28T00:00:00.000Z'
+  );
+
+  assert.equal(parsed.sites[0].runtime, 'tvbox-jar-spider');
+  assert.equal(parsed.sites[0].searchable, true);
 });
 
 test('builds a config diagnostic summary for imported sources and sites', () => {
@@ -151,9 +178,10 @@ test('builds a config diagnostic summary for imported sources and sites', () => 
       },
       {
         id: 'plugin-one',
+        runtime: 'tvbox-jar-spider',
         type: 3,
         searchable: true,
-        unsupportedReason: '插件站点暂不执行第三方脚本',
+        unsupportedReason: '',
       },
     ],
   });
@@ -163,12 +191,13 @@ test('builds a config diagnostic summary for imported sources and sites', () => 
     configSourceCount: 1,
     pluginSourceCount: 1,
     totalSites: 3,
-    searchableSites: 1,
+    searchableSites: 2,
     nonSearchableSites: 1,
-    pluginSites: 1,
-    unsupportedSites: 1,
+    pluginSites: 0,
+    runtimeSites: 1,
+    unsupportedSites: 0,
     status: 'ready',
-    summary: '已导入 3 个站点，1 个可搜索，1 个插件/不兼容',
+    summary: '已导入 3 个站点，2 个可搜索，TVBox Spider 1 个',
   });
 });
 

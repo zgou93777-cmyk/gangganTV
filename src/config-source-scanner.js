@@ -129,6 +129,10 @@ async function scanConfigSourceCandidate(candidate, { fetchImpl, now }) {
 }
 
 function buildConfigScanMessage(siteCount, diagnostics) {
+  if (siteCount > 0 && diagnostics.runtimeSites > 0) {
+    return `可导入配置，识别到 ${siteCount} 个站点；其中 ${diagnostics.runtimeSites} 个 TVBox Spider 源需要解析服务适配。`;
+  }
+
   if (siteCount > 0 && diagnostics.searchableSites === 0 && diagnostics.pluginSites > 0) {
     return `可导入配置，识别到 ${siteCount} 个站点；但都是插件源，当前版本只展示，不执行本地搜索。`;
   }
@@ -148,7 +152,11 @@ function classifyConfigScanFailure(error) {
 
 function buildPluginSiteDiagnostics(sites) {
   return (sites || [])
-    .filter((site) => site?.unsupportedReason || Number(site?.type) === 3)
+    .filter(
+      (site) =>
+        site?.unsupportedReason ||
+        (site?.runtime !== 'tvbox-jar-spider' && Number(site?.type) === 3)
+    )
     .map((site) => diagnosePluginSite(site));
 }
 
