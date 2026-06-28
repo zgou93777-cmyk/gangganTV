@@ -22,6 +22,16 @@ function createParserServer(options = {}) {
   const routes = new Map();
 
   routes.set('GET /health', async () => ({
+    capabilities: {
+      catvod: true,
+      tvboxRoutes: true,
+      tvboxRuntime: Boolean(
+        tvBoxRunner?.runtime &&
+          typeof tvBoxRunner.runtime.search === 'function' &&
+          typeof tvBoxRunner.runtime.detail === 'function' &&
+          typeof tvBoxRunner.runtime.play === 'function'
+      ),
+    },
     ok: true,
     service: 'ganggan-plugin-parser',
   }));

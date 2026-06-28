@@ -17,6 +17,11 @@ test('GET /health reports service status', async () => {
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json(), {
+    capabilities: {
+      catvod: true,
+      tvboxRoutes: true,
+      tvboxRuntime: false,
+    },
     ok: true,
     service: 'ganggan-plugin-parser',
   });
