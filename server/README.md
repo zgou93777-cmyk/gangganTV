@@ -45,6 +45,20 @@ The health response includes capability flags:
 the Android TVBox Spider/JAR runtime is not connected yet, so `csp_*` sources
 can be imported and listed but cannot actually search/play through Spider yet.
 
+## App Settings
+
+For local Expo Go testing, keep the parser on this computer:
+
+1. Start the parser with `npm --prefix server start`.
+2. In the app settings, tap "使用本机解析器地址" or enter the LAN URL manually.
+3. Leave Token empty unless `PLUGIN_SERVER_TOKEN` was set before starting the parser.
+4. Tap "导入 CatVod 测试源" to add `https://9280.kstore.vip/cat/index.js.md5`.
+
+This CatVod source has been verified locally for search and detail retrieval.
+Some returned play lines are netdisk resources and may time out or require account
+capabilities, so a timeout from `/catvod/play` does not mean the video player is
+broken.
+
 ## Docker
 
 ```bash

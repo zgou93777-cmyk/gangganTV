@@ -90,9 +90,13 @@ const {
   buildSearchBuckets,
   filterResultsByBucket,
 } = require('./src/search-buckets');
+const {
+  searchAcrossSites,
+} = require('./src/search-workflow');
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
+const RECOMMENDED_CATVOD_SOURCE_URL = 'https://9280.kstore.vip/cat/index.js.md5';
 const LOCAL_PARSER_HINT_URL = 'http://192.168.220.41:3000';
 const TOP_SAFE_PADDING = Platform.select({
   ios: 54,
@@ -892,6 +896,7 @@ export default function App() {
       ].join('，');
 
       setPluginServerHealth({
+        capabilities,
         ok,
         message: ok
           ? `本地解析服务正常：${capabilityText}`
@@ -942,9 +947,9 @@ export default function App() {
         : searchKeyword.trim();
     setSourceMenuOpen(false);
 
-    if (!selectedSite) {
+    if (!sites.length) {
       setActiveType('config');
-      setMessage('请先导入并选择一个站点');
+      setMessage('请先导入可搜索的站点');
       return;
     }
 
@@ -961,32 +966,34 @@ export default function App() {
     setActiveSearchBucketId('all');
 
     try {
-      const results = isTvBoxSpiderSite(selectedSite)
-        ? await fetchTvBoxServerSearch(
-            buildTvBoxServerConfig(selectedSite),
-            cleanKeyword
-          )
-        : isPluginServerSite(selectedSite)
-        ? await fetchPluginServerSearch(
-            buildPluginServerConfig(selectedSite),
-            cleanKeyword
-          )
-        : isCatVodRuntimeActive(selectedSite)
-        ? normalizeCatVodSearchResult(
-            await catVodRuntimeRef.current.call('search', [cleanKeyword, false, 1])
-          )
-        : await fetchTvBoxSearch(selectedSite, cleanKeyword);
+      const { failures, results, targets } = await searchAcrossSites({
+        getSkipReason: getSearchSkipReason,
+        keyword: cleanKeyword,
+        selectedSourceIds: selectedSearchSourceIds,
+        sites,
+        searchSite,
+      });
 
+      if (targets.length) {
+        setSelectedSiteId(targets[0].id);
+      }
       setSearchResults(results);
+      setSearchFailures(failures);
       setSelectedResult(null);
       setSelectedDetail(null);
-      setMessage(results.length ? `找到 ${results.length} 个结果` : '没有搜索结果');
+      setMessage(
+        buildSearchMessage({
+          failureCount: failures.length,
+          resultCount: results.length,
+          targetCount: targets.length,
+        })
+      );
     } catch (searchError) {
       setSearchResults([]);
       setSearchFailures([
         {
-          sourceId: selectedSite.id,
-          sourceName: selectedSite.name,
+          sourceId: selectedSite?.id || '',
+          sourceName: selectedSite?.name || '当前站点',
           message: searchError?.message || '搜索失败',
         },
       ]);
@@ -1019,11 +1026,16 @@ export default function App() {
   }
 
   async function loadDetail(result) {
-    if (!selectedSite) {
+    const resultSite = result?.sourceId
+      ? sites.find((site) => site.id === result.sourceId)
+      : selectedSite;
+
+    if (!resultSite) {
       setMessage('请先选择站点');
       return;
     }
 
+    setSelectedSiteId(resultSite.id);
     setSelectedResult(result);
     setSelectedDetail(null);
     setActivePage('detail');
@@ -1031,21 +1043,21 @@ export default function App() {
     setMessage('正在读取播放列表');
 
     try {
-      const detail = isTvBoxSpiderSite(selectedSite)
+      const detail = isTvBoxSpiderSite(resultSite)
         ? await fetchTvBoxServerDetail(
-            buildTvBoxServerConfig(selectedSite),
+            buildTvBoxServerConfig(resultSite),
             result.id
           )
-        : isPluginServerSite(selectedSite)
+        : isPluginServerSite(resultSite)
         ? await fetchPluginServerDetail(
-            buildPluginServerConfig(selectedSite),
+            buildPluginServerConfig(resultSite),
             result.id
           )
-        : isCatVodRuntimeActive(selectedSite)
+        : isCatVodRuntimeActive(resultSite)
         ? normalizeCatVodDetailResult(
             await catVodRuntimeRef.current.call('detail', [result.id])
           )
-        : await fetchTvBoxDetail(selectedSite, result.id);
+        : await fetchTvBoxDetail(resultSite, result.id);
 
       setSelectedDetail(detail);
       setMessage(
@@ -1115,6 +1127,35 @@ export default function App() {
     return site?.runtime === 'tvbox-jar-spider';
   }
 
+  function getSearchSkipReason(site) {
+    if (
+      isTvBoxSpiderSite(site) &&
+      pluginServerHealth?.capabilities?.tvboxRuntime !== true
+    ) {
+      return 'TVBox Spider 运行时未连接，当前只能先用 CatVod JS 或普通 JSON API 源';
+    }
+
+    return '';
+  }
+
+  async function searchSite(site, keyword) {
+    if (isTvBoxSpiderSite(site)) {
+      return fetchTvBoxServerSearch(buildTvBoxServerConfig(site), keyword);
+    }
+
+    if (isPluginServerSite(site)) {
+      return fetchPluginServerSearch(buildPluginServerConfig(site), keyword);
+    }
+
+    if (isCatVodRuntimeActive(site)) {
+      return normalizeCatVodSearchResult(
+        await catVodRuntimeRef.current.call('search', [keyword, false, 1])
+      );
+    }
+
+    return fetchTvBoxSearch(site, keyword);
+  }
+
   function buildTvBoxServerConfig(site) {
     if (!pluginServerUrl.trim()) {
       throw new Error('请先在设置里填写解析服务地址');
@@ -1131,10 +1172,6 @@ export default function App() {
   function buildPluginServerConfig(site) {
     if (!pluginServerUrl.trim()) {
       throw new Error('请先在设置里填写插件解析服务地址');
-    }
-
-    if (!pluginServerToken.trim()) {
-      throw new Error('请先在设置里填写插件解析服务 Token');
     }
 
     return {
@@ -2092,8 +2129,20 @@ export default function App() {
               测试源
             </CompactButton>
           </View>
+          <CompactButton
+            disabled={loadingConfig}
+            onPress={() => {
+              setConfigUrl(RECOMMENDED_CATVOD_SOURCE_URL);
+              importConfigFromUrl(RECOMMENDED_CATVOD_SOURCE_URL).catch(() =>
+                setMessage('CatVod 测试源导入失败')
+              );
+            }}
+            variant="primary"
+          >
+            导入 CatVod 测试源
+          </CompactButton>
           <Text style={styles.helperText}>
-            测试源只包含公开样片。现在优先使用你电脑上的本地解析器；OK影视/TVBox 的 csp Spider 源需要本地 TVBox runtime。
+            先启动你电脑上的本地解析器，再导入 CatVod 测试源。OK影视/TVBox 的 csp Spider 源会列出来，但要等本地 TVBox runtime 接上后才能搜索播放。
           </Text>
           <TextInput
             autoCapitalize="none"
@@ -2120,6 +2169,13 @@ export default function App() {
               setPluginServerUrl(LOCAL_PARSER_HINT_URL);
               setPluginServerToken('');
               setPluginServerHealth(null);
+              AsyncStorage.setItem(
+                STORAGE_KEYS.pluginServerUrl,
+                LOCAL_PARSER_HINT_URL
+              ).catch(() => setMessage('本机解析器地址保存失败'));
+              AsyncStorage.removeItem(STORAGE_KEYS.pluginServerToken).catch(() =>
+                setMessage('插件解析服务 Token 清理失败')
+              );
               setMessage(`已填入本地解析器地址：${LOCAL_PARSER_HINT_URL}`);
             }}
             variant="plain"
@@ -2407,7 +2463,7 @@ export default function App() {
               <View style={styles.searchEmptyState}>
                 <Text style={styles.sectionTitle}>输入关键词开始搜索</Text>
                 <Text style={styles.sectionHint}>
-                  默认搜索当前站点，后续会扩展为真正的全部源并发搜索。
+                  默认搜索全部可用来源，可在右上角筛选配置源。
                 </Text>
               </View>
             )}
@@ -2437,7 +2493,7 @@ export default function App() {
           <View style={styles.overlayHandle} />
           <Text style={styles.searchOverlayTitle}>选择配置源</Text>
           <Text style={styles.sectionHint}>
-            当前版本先保存选择状态，搜索仍优先使用当前站点；多源并发搜索下一版接上。
+            默认搜索全部可用来源；取消勾选后只搜索保留的来源。
           </Text>
           <ScrollView
             contentContainerStyle={styles.sourceFilterList}
@@ -3469,6 +3525,26 @@ function upsertById(items, nextItem) {
 
 function firstUsableSiteId(items) {
   return items.find((site) => site.searchable && !site.unsupportedReason)?.id || '';
+}
+
+function buildSearchMessage({ failureCount = 0, resultCount = 0, targetCount = 0 } = {}) {
+  if (!targetCount) {
+    return '没有可搜索的来源，请先导入 CatVod 插件源或可用配置';
+  }
+
+  if (resultCount > 0 && failureCount > 0) {
+    return `找到 ${resultCount} 个结果，${failureCount} 个来源暂不可用`;
+  }
+
+  if (resultCount > 0) {
+    return `找到 ${resultCount} 个结果`;
+  }
+
+  if (failureCount > 0) {
+    return `${failureCount} 个来源暂不可用，没有搜索结果`;
+  }
+
+  return '没有搜索结果';
 }
 
 function sourceNameFromUrl(value, fallback) {

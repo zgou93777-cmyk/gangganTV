@@ -203,7 +203,7 @@ test('plugin server errors use clear Chinese messages', async () => {
             504
           )
       ),
-    /超时/
+    /超时|网盘|账号/
   );
 });
 

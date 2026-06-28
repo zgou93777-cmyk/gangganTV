@@ -101,7 +101,7 @@ function formatPluginServerError(status, payload) {
   }
 
   if (status === 504 || code === 'PLUGIN_TIMEOUT') {
-    return '插件解析服务超时，请稍后重试或换一个站点';
+    return '插件解析服务超时：该线路可能是网盘资源、需要账号能力，或当前源暂不兼容；请换一个播放线路/结果再试';
   }
 
   if (status >= 500) {
