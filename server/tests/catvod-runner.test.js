@@ -382,3 +382,24 @@ test('CatVodRunner reports bundle route parser failures as incompatible source e
     }
   );
 });
+
+test('CatVodRunner applies configurable script startup timeout inside the worker', async () => {
+  const runner = new CatVodRunner({
+    fetchText: async () => 'while (true) {}',
+    scriptTimeoutMs: 50,
+    timeoutMs: 3000,
+  });
+
+  await assert.rejects(
+    () =>
+      runner.search({
+        keyword: 'Slow',
+        scriptUrl: 'https://cat.example.com/index.js',
+      }),
+    (error) => {
+      assert.equal(error.code, 'ERR_SCRIPT_EXECUTION_TIMEOUT');
+      assert.match(error.message, /50ms/);
+      return true;
+    }
+  );
+});

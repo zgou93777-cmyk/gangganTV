@@ -2,10 +2,15 @@ const { fork } = require('node:child_process');
 const path = require('node:path');
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_SCRIPT_TIMEOUT_MS = 5_000;
 
 class CatVodRunner {
   constructor(options = {}) {
     this.fetchText = options.fetchText || fetchText;
+    this.scriptTimeoutMs = normalizeTimeoutMs(
+      options.scriptTimeoutMs,
+      DEFAULT_SCRIPT_TIMEOUT_MS
+    );
     this.timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
   }
 
@@ -34,6 +39,7 @@ class CatVodRunner {
         scriptUrl,
       },
       scriptText,
+      scriptTimeoutMs: this.scriptTimeoutMs,
       timeoutMs: this.timeoutMs,
     });
   }
@@ -80,7 +86,7 @@ async function fetchText(url) {
   return response.text();
 }
 
-function runWorker({ method, payload, scriptText, timeoutMs }) {
+function runWorker({ method, payload, scriptText, scriptTimeoutMs, timeoutMs }) {
   return new Promise((resolve, reject) => {
     const workerPath = path.join(__dirname, 'catvod-worker.js');
     const child = fork(workerPath, [], {
@@ -132,6 +138,7 @@ function runWorker({ method, payload, scriptText, timeoutMs }) {
       method,
       payload,
       scriptText,
+      scriptTimeoutMs,
     });
 
     function finish(error, value) {
@@ -168,6 +175,16 @@ function normalizeHttpUrl(value, fieldName) {
 
 function isMd5HashText(value) {
   return /^[a-f0-9]{32}$/i.test(String(value || '').trim());
+}
+
+function normalizeTimeoutMs(value, fallback) {
+  const timeout = Number(value);
+
+  if (Number.isFinite(timeout) && timeout > 0) {
+    return timeout;
+  }
+
+  return fallback;
 }
 
 module.exports = {

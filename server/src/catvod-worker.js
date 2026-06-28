@@ -18,13 +18,13 @@ process.on('message', async (message) => {
   }
 });
 
-async function executePlugin({ method, payload, scriptText }) {
+async function executePlugin({ method, payload, scriptText, scriptTimeoutMs }) {
   const context = createPluginContext();
   vm.createContext(context);
   new vm.Script(String(scriptText || ''), {
     filename: payload?.scriptUrl || 'catvod-plugin.js',
   }).runInContext(context, {
-    timeout: 5_000,
+    timeout: normalizeTimeoutMs(scriptTimeoutMs, 5_000),
   });
 
   if (context.module?.exports?.start) {
@@ -918,4 +918,14 @@ function classifyError(error) {
   }
 
   return error?.code || 'PLUGIN_EXECUTION_FAILED';
+}
+
+function normalizeTimeoutMs(value, fallback) {
+  const timeout = Number(value);
+
+  if (Number.isFinite(timeout) && timeout > 0) {
+    return timeout;
+  }
+
+  return fallback;
 }

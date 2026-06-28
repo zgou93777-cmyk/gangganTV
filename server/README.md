@@ -7,6 +7,7 @@ Server-side CatVod parser for sources that cannot safely run inside the iOS app.
 ```bash
 npm --prefix server test
 $env:PLUGIN_SERVER_TOKEN="change-me"
+$env:PLUGIN_SCRIPT_TIMEOUT_MS="20000"
 $env:PORT="3000"
 npm --prefix server start
 ```
@@ -24,6 +25,7 @@ docker build -t ganggan-plugin-parser ./server
 docker run -d --name ganggan-plugin-parser \
   -p 3000:3000 \
   -e PLUGIN_SERVER_TOKEN=change-me \
+  -e PLUGIN_SCRIPT_TIMEOUT_MS=20000 \
   --restart unless-stopped \
   ganggan-plugin-parser
 ```
