@@ -18,22 +18,24 @@ const BLOCKED_PATTERNS = [
   ['SecureStore', /\bSecureStore\b/],
   ['localStorage', /\blocalStorage\b/],
   ['sessionStorage', /\bsessionStorage\b/],
-  ['globalThis', /\bglobalThis\b/],
   ['process', /\bprocess\b/],
-  ['document', /\bdocument\b/],
-  ['window', /\bwindow\b/],
 ];
+
+const SHIM_COMPATIBLE_TOKENS = new Set(['localStorage', 'sessionStorage', 'process']);
 
 function preflightPluginSandbox(scriptText) {
   const blockedTokens = detectBlockedTokens(scriptText);
 
   if (blockedTokens.length) {
+    const compatibility = summarizeSandboxCompatibility(blockedTokens);
+
     return {
       ok: false,
       status: 'sandbox-preflight-blocked',
       title: '沙盒预检阻断',
-      message: `脚本包含不允许在本机执行的能力：${blockedTokens.join(', ')}。`,
+      message: compatibility.message,
       blockedTokens,
+      compatibility,
       allowedApis: ALLOWED_APIS,
       nextStep: '该插件源暂时不能本地执行；后续可改走服务端解析层或等待专用适配器。',
     };
@@ -45,8 +47,43 @@ function preflightPluginSandbox(scriptText) {
     title: '沙盒预检通过',
     message: '脚本没有发现明显危险能力，可以进入受限执行器技术验证。',
     blockedTokens: [],
+    compatibility: {
+      status: 'ready',
+      runnable: true,
+      shimTokens: [],
+      blockedTokens: [],
+      message: '脚本可以进入受限执行器技术验证。',
+    },
     allowedApis: ALLOWED_APIS,
     nextStep: '下一步在隔离执行层中只暴露网络请求和基础字符串/JSON 能力，验证 search/detail/play 是否能返回最终播放地址。',
+  };
+}
+
+function summarizeSandboxCompatibility(blockedTokens) {
+  const uniqueTokens = [...new Set(blockedTokens)];
+  const shimTokens = uniqueTokens.filter((token) => SHIM_COMPATIBLE_TOKENS.has(token));
+  const hardBlockedTokens = uniqueTokens.filter(
+    (token) => !SHIM_COMPATIBLE_TOKENS.has(token)
+  );
+
+  if (!hardBlockedTokens.length) {
+    return {
+      status: 'shim-required',
+      runnable: true,
+      shimTokens,
+      blockedTokens: [],
+      message: `脚本需要兼容层：${shimTokens.join(', ')}。`,
+    };
+  }
+
+  return {
+    status: shimTokens.length ? 'shim-required' : 'blocked',
+    runnable: false,
+    shimTokens,
+    blockedTokens: hardBlockedTokens,
+    message: shimTokens.length
+      ? `脚本需要兼容层：${shimTokens.join(', ')}；仍阻断：${hardBlockedTokens.join(', ')}。`
+      : `脚本包含不允许在本机执行的能力：${hardBlockedTokens.join(', ')}。`,
   };
 }
 
@@ -73,4 +110,5 @@ function readableText(value) {
 
 module.exports = {
   preflightPluginSandbox,
+  summarizeSandboxCompatibility,
 };

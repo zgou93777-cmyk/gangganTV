@@ -2251,7 +2251,12 @@ function PluginVerifyResultPanel({ result }) {
       </View>
       {result.scriptUrl ? (
         <Text numberOfLines={2} selectable style={styles.rowMeta}>
-          {result.scriptUrl}
+          脚本入口：{result.scriptUrl}
+        </Text>
+      ) : null}
+      {result.manifestUrl ? (
+        <Text numberOfLines={2} selectable style={styles.rowMeta}>
+          校验入口：{result.manifestUrl}
         </Text>
       ) : null}
       <CapabilityDots capabilities={result.capabilities} />
@@ -2278,6 +2283,16 @@ function PluginVerifyResultPanel({ result }) {
           {result.sandboxPreflight.blockedTokens?.length ? (
             <Text selectable style={styles.pluginDiagnosticNext}>
               阻断能力：{result.sandboxPreflight.blockedTokens.join(' / ')}
+            </Text>
+          ) : null}
+          {result.sandboxPreflight.compatibility?.shimTokens?.length ? (
+            <Text selectable style={styles.pluginDiagnosticNext}>
+              可兼容：{result.sandboxPreflight.compatibility.shimTokens.join(' / ')}
+            </Text>
+          ) : null}
+          {result.sandboxPreflight.compatibility?.blockedTokens?.length ? (
+            <Text selectable style={styles.pluginDiagnosticNext}>
+              仍需适配：{result.sandboxPreflight.compatibility.blockedTokens.join(' / ')}
             </Text>
           ) : null}
           <Text selectable style={styles.pluginDiagnosticNext}>

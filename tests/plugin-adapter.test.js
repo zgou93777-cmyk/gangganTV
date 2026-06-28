@@ -40,6 +40,7 @@ test('verifies CatVod script capabilities by static inspection only', async () =
     title: 'CatVod 脚本静态验证',
     message: '已下载脚本并完成静态能力识别；当前没有执行第三方脚本。',
     scriptUrl: 'https://cat.example.com/index.js.md5',
+    manifestUrl: '',
     scriptBytes: 1,
     scriptText: 'script',
     capabilities: {
@@ -54,6 +55,13 @@ test('verifies CatVod script capabilities by static inspection only', async () =
       title: '沙盒预检通过',
       message: '脚本没有发现明显危险能力，可以进入受限执行器技术验证。',
       blockedTokens: [],
+      compatibility: {
+        status: 'ready',
+        runnable: true,
+        shimTokens: [],
+        blockedTokens: [],
+        message: '脚本可以进入受限执行器技术验证。',
+      },
       allowedApis: ['fetch', 'JSON', 'URL', 'URLSearchParams', 'TextEncoder', 'TextDecoder'],
       nextStep: '下一步在隔离执行层中只暴露网络请求和基础字符串/JSON 能力，验证 search/detail/play 是否能返回最终播放地址。',
     },
@@ -144,6 +152,46 @@ test('reports md5 hash files as non executable plugin manifests', async () => {
   assert.equal(result.scriptBytes, 32);
   assert.equal(result.scriptText, '');
   assert.match(result.message, /MD5/);
+});
+
+test('discovers executable CatVod scripts next to md5 manifest urls', async () => {
+  const calls = [];
+  const result = await verifyPluginTarget(
+    {
+      kind: 'source',
+      url: 'https://cat.example.com/index.js.md5',
+    },
+    {
+      fetchImpl: async (url) => {
+        calls.push(url);
+
+        if (url.endsWith('/index.js.md5')) {
+          return textResponse('742b32fc4443dad721ae85639c5e4c60');
+        }
+
+        if (url.endsWith('/index.js')) {
+          return textResponse(`
+            async function search(wd) { return { list: [] }; }
+            async function detail(id) { return { list: [] }; }
+            async function play(flag, id) { return { url: id }; }
+          `);
+        }
+
+        return textResponse('not found', 404);
+      },
+    }
+  );
+
+  assert.deepEqual(calls, [
+    'https://cat.example.com/index.js.md5',
+    'https://cat.example.com/index.js',
+  ]);
+  assert.equal(result.status, 'sandbox-required');
+  assert.equal(result.scriptUrl, 'https://cat.example.com/index.js');
+  assert.equal(result.manifestUrl, 'https://cat.example.com/index.js.md5');
+  assert.equal(result.capabilities.search, 'detected');
+  assert.equal(result.capabilities.play, 'detected');
+  assert.match(result.message, /已从 MD5 校验入口找到可执行脚本/);
 });
 
 function textResponse(body, status = 200) {
