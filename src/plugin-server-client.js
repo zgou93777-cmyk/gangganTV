@@ -36,10 +36,7 @@ async function postPluginServer(config, path, body, fetchImpl) {
   const url = buildPluginServerUrl(config?.baseUrl, path);
   const response = await fetchImpl(url, {
     body: JSON.stringify(body),
-    headers: {
-      Accept: 'application/json, text/plain;q=0.9, */*;q=0.8',
-      'Content-Type': 'application/json',
-    },
+    headers: buildPluginServerHeaders(config?.token),
     method: 'POST',
   });
 
@@ -62,6 +59,20 @@ function buildPluginServerUrl(baseUrl, path) {
   }
 
   return `${cleanBaseUrl.replace(/\/+$/, '')}${path}`;
+}
+
+function buildPluginServerHeaders(token) {
+  const headers = {
+    Accept: 'application/json, text/plain;q=0.9, */*;q=0.8',
+    'Content-Type': 'application/json',
+  };
+  const cleanToken = typeof token === 'string' ? token.trim() : '';
+
+  if (cleanToken) {
+    headers.Authorization = `Bearer ${cleanToken}`;
+  }
+
+  return headers;
 }
 
 module.exports = {

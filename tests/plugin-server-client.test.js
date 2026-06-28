@@ -12,11 +12,16 @@ test('fetchPluginServerSearch posts script and keyword then normalizes results',
   const results = await fetchPluginServerSearch(
     {
       baseUrl: 'https://parser.example.com',
+      token: 'secret-token',
       scriptUrl: 'https://cat.example.com/index.js',
     },
     '三体',
     async (url, options) => {
-      calls.push({ url, options: JSON.parse(options.body) });
+      calls.push({
+        headers: options.headers,
+        url,
+        options: JSON.parse(options.body),
+      });
       return jsonResponse({
         list: [{ vod_id: 'movie-1', vod_name: '三体' }],
       });
@@ -25,6 +30,11 @@ test('fetchPluginServerSearch posts script and keyword then normalizes results',
 
   assert.deepEqual(calls, [
     {
+      headers: {
+        Accept: 'application/json, text/plain;q=0.9, */*;q=0.8',
+        Authorization: 'Bearer secret-token',
+        'Content-Type': 'application/json',
+      },
       url: 'https://parser.example.com/catvod/search',
       options: {
         scriptUrl: 'https://cat.example.com/index.js',

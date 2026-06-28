@@ -95,6 +95,7 @@ const STORAGE_KEYS = {
   selectedSiteId: 'iptv.prototype.selectedSiteId',
   playHistory: 'iptv.prototype.playHistory',
   pluginServerUrl: 'iptv.prototype.pluginServerUrl',
+  pluginServerToken: 'iptv.prototype.pluginServerToken',
 };
 
 const LABELS = {
@@ -117,6 +118,7 @@ export default function App() {
   const [configUrl, setConfigUrl] = useState('');
   const [configSourceText, setConfigSourceText] = useState('');
   const [pluginServerUrl, setPluginServerUrl] = useState('');
+  const [pluginServerToken, setPluginServerToken] = useState('');
   const [configSourceScanResults, setConfigSourceScanResults] = useState([]);
   const [configSources, setConfigSources] = useState([]);
   const [sites, setSites] = useState([]);
@@ -235,6 +237,7 @@ export default function App() {
       storedSelectedSiteId,
       storedPlayHistory,
       storedPluginServerUrl,
+      storedPluginServerToken,
     ] = await Promise.all([
       AsyncStorage.getItem(STORAGE_KEYS.live),
       AsyncStorage.getItem(STORAGE_KEYS.livePlaylistUrl),
@@ -246,6 +249,7 @@ export default function App() {
       AsyncStorage.getItem(STORAGE_KEYS.selectedSiteId),
       AsyncStorage.getItem(STORAGE_KEYS.playHistory),
       AsyncStorage.getItem(STORAGE_KEYS.pluginServerUrl),
+      AsyncStorage.getItem(STORAGE_KEYS.pluginServerToken),
     ]);
 
     const nextSources = parseStoredArray(storedSources);
@@ -258,6 +262,7 @@ export default function App() {
     setLiveChannels(nextLiveChannels);
     setVodUrl(storedVodUrl || '');
     setPluginServerUrl(storedPluginServerUrl || '');
+    setPluginServerToken(storedPluginServerToken || '');
     setConfigUrl(storedConfigUrl || '');
     setConfigSources(nextSources);
     setSites(nextSites);
@@ -773,10 +778,17 @@ export default function App() {
 
   async function savePluginServerUrl() {
     const cleanUrl = pluginServerUrl.trim();
+    const cleanToken = pluginServerToken.trim();
 
     if (!cleanUrl) {
-      await AsyncStorage.removeItem(STORAGE_KEYS.pluginServerUrl);
+      await Promise.all([
+        AsyncStorage.removeItem(STORAGE_KEYS.pluginServerUrl),
+        cleanToken
+          ? AsyncStorage.setItem(STORAGE_KEYS.pluginServerToken, cleanToken)
+          : AsyncStorage.removeItem(STORAGE_KEYS.pluginServerToken),
+      ]);
       setPluginServerUrl('');
+      setPluginServerToken(cleanToken);
       setMessage('已清空插件解析服务地址');
       return;
     }
@@ -786,8 +798,14 @@ export default function App() {
       return;
     }
 
-    await AsyncStorage.setItem(STORAGE_KEYS.pluginServerUrl, cleanUrl);
+    await Promise.all([
+      AsyncStorage.setItem(STORAGE_KEYS.pluginServerUrl, cleanUrl),
+      cleanToken
+        ? AsyncStorage.setItem(STORAGE_KEYS.pluginServerToken, cleanToken)
+        : AsyncStorage.removeItem(STORAGE_KEYS.pluginServerToken),
+    ]);
     setPluginServerUrl(cleanUrl);
+    setPluginServerToken(cleanToken);
     setMessage('已保存插件解析服务地址');
   }
 
@@ -950,6 +968,7 @@ export default function App() {
 
     return {
       baseUrl: pluginServerUrl.trim(),
+      token: pluginServerToken.trim(),
       scriptUrl: site?.scriptUrl || site?.api,
     };
   }
@@ -1656,6 +1675,16 @@ export default function App() {
             placeholderTextColor="#8d96a0"
             style={styles.input}
             value={pluginServerUrl}
+          />
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={setPluginServerToken}
+            placeholder="插件解析服务 Token，可选"
+            placeholderTextColor="#8d96a0"
+            secureTextEntry
+            style={styles.input}
+            value={pluginServerToken}
           />
           <CompactButton
             onPress={() =>
