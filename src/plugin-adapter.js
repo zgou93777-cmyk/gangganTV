@@ -68,6 +68,24 @@ async function verifyPluginSource(url, { fetchImpl }) {
 
   try {
     const scriptText = await fetchPluginScript(cleanUrl, fetchImpl);
+
+    if (isMd5HashText(scriptText)) {
+      return {
+        ok: false,
+        targetKind: 'source',
+        runtime: 'catvod',
+        status: 'script-manifest-only',
+        title: 'CatVod 脚本入口缺失',
+        message: '该链接只返回 MD5 校验值，不是可执行的 CatVod JS 脚本正文。',
+        scriptUrl: cleanUrl,
+        scriptBytes: scriptText.length,
+        scriptText: '',
+        capabilities: diagnostic.capabilities,
+        sandboxPreflight: null,
+        nextStep: '请提供对应的 index.js 脚本入口；如果只有 TVBox/CSP/JAR 配置，则需要专用适配器或服务端解析层。',
+      };
+    }
+
     const capabilities = inspectScriptCapabilities(scriptText);
     const sandboxPreflight = preflightPluginSandbox(scriptText);
 
@@ -80,6 +98,7 @@ async function verifyPluginSource(url, { fetchImpl }) {
       message: '已下载脚本并完成静态能力识别；当前没有执行第三方脚本。',
       scriptUrl: cleanUrl,
       scriptBytes: scriptText.length,
+      scriptText,
       capabilities,
       sandboxPreflight,
       nextStep: '下一步需要受限 JS 沙盒验证这些函数能否安全运行，再尝试解析最终播放地址。',
@@ -123,6 +142,10 @@ async function fetchPluginScript(url, fetchImpl) {
   }
 
   return response.text();
+}
+
+function isMd5HashText(value) {
+  return /^[a-f0-9]{32}$/i.test(readableText(value));
 }
 
 function inspectScriptCapabilities(scriptText) {

@@ -2,7 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEvent } from 'expo';
 import { StatusBar } from 'expo-status-bar';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { WebView } from 'react-native-webview';
 import {
   KeyboardAvoidingView,
   Image,
@@ -60,6 +61,15 @@ const {
 const {
   verifyPluginTarget,
 } = require('./src/plugin-adapter');
+const {
+  buildCatVodExecutorHtml,
+  normalizeCatVodDetailResult,
+  normalizeCatVodPlayResult,
+  normalizeCatVodSearchResult,
+} = require('./src/catvod-adapter');
+const {
+  CatVodRuntimeController,
+} = require('./src/catvod-runtime');
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
@@ -126,6 +136,11 @@ export default function App() {
   const [batchSiteTestResult, setBatchSiteTestResult] = useState(null);
   const [verifyingPlugin, setVerifyingPlugin] = useState(false);
   const [pluginVerifyResult, setPluginVerifyResult] = useState(null);
+  const [catVodExecutorHtml, setCatVodExecutorHtml] = useState('');
+  const [catVodSource, setCatVodSource] = useState(null);
+  const [catVodReady, setCatVodReady] = useState(false);
+  const catVodWebViewRef = useRef(null);
+  const catVodRuntimeRef = useRef(null);
 
   const player = useVideoPlayer(null, (videoPlayer) => {
     videoPlayer.loop = false;
@@ -669,11 +684,67 @@ export default function App() {
       });
 
       setPluginVerifyResult(result);
+      if (result.sandboxPreflight?.ok && result.scriptText) {
+        loadCatVodExecutor(source, result.scriptText);
+      }
       setMessage(result.message);
     } catch (verifyError) {
       setMessage(verifyError?.message || '插件源验证失败');
     } finally {
       setVerifyingPlugin(false);
+    }
+  }
+
+  function loadCatVodExecutor(source, scriptText) {
+    catVodRuntimeRef.current = new CatVodRuntimeController({
+      fetchText: fetchCatVodText,
+      injectJavaScript: (script) => catVodWebViewRef.current?.injectJavaScript(script),
+    });
+    const runtimeSite = {
+      id: 'catvod-runtime',
+      siteKey: 'catvod-runtime',
+      name: `${source.name || 'CatVod'} 插件`,
+      type: 3,
+      api: source.url,
+      searchable: true,
+      unsupportedReason: '',
+      sourceId: source.id,
+      sourceName: source.name || '插件源',
+      runtime: 'catvod-webview',
+    };
+    const nextSites = upsertById(sites, runtimeSite);
+
+    setCatVodSource(source);
+    setCatVodReady(false);
+    setCatVodExecutorHtml(buildCatVodExecutorHtml(scriptText));
+    setSites(nextSites);
+    setSelectedSiteId(runtimeSite.id);
+    setActiveTab('discover');
+    setMessage('正在加载插件执行器');
+  }
+
+  async function fetchCatVodText(url, options = {}) {
+    const response = await fetch(url, {
+      headers: options.headers || {
+        Accept: 'application/json, text/plain;q=0.9, */*;q=0.8',
+        'User-Agent': 'okhttp/4.10.0',
+      },
+      method: options.method || 'GET',
+    });
+
+    if (!response.ok) {
+      throw new Error(`请求失败：HTTP ${response.status}`);
+    }
+
+    return response.text();
+  }
+
+  async function handleCatVodMessage(event) {
+    const payload = await catVodRuntimeRef.current?.handleMessage(event.nativeEvent.data);
+
+    if (payload?.type === 'ready') {
+      setCatVodReady(true);
+      setMessage(`插件执行器已准备：${catVodSource?.name || 'CatVod'}`);
     }
   }
 
@@ -697,7 +768,11 @@ export default function App() {
     setMessage('正在搜索');
 
     try {
-      const results = await fetchTvBoxSearch(selectedSite, cleanKeyword);
+      const results = isCatVodRuntimeActive(selectedSite)
+        ? normalizeCatVodSearchResult(
+            await catVodRuntimeRef.current.call('search', [cleanKeyword, false, 1])
+          )
+        : await fetchTvBoxSearch(selectedSite, cleanKeyword);
 
       setSearchResults(results);
       setSelectedResult(null);
@@ -725,7 +800,11 @@ export default function App() {
     setMessage('正在读取播放列表');
 
     try {
-      const detail = await fetchTvBoxDetail(selectedSite, result.id);
+      const detail = isCatVodRuntimeActive(selectedSite)
+        ? normalizeCatVodDetailResult(
+            await catVodRuntimeRef.current.call('detail', [result.id])
+          )
+        : await fetchTvBoxDetail(selectedSite, result.id);
 
       setSelectedDetail(detail);
       setMessage(
@@ -749,7 +828,15 @@ export default function App() {
     setMessage('正在解析播放地址');
 
     try {
-      const playableUrl = await resolveTvBoxEpisode(selectedSite, episode);
+      const playableUrl = isCatVodRuntimeActive(selectedSite)
+        ? normalizeCatVodPlayResult(
+            await catVodRuntimeRef.current.call('play', [
+              group.name,
+              episode.url,
+              [],
+            ])
+          ) || episode.url
+        : await resolveTvBoxEpisode(selectedSite, episode);
       await playResolvedUrl(
         'vod',
         playableUrl,
@@ -763,6 +850,10 @@ export default function App() {
     } finally {
       setLoadingEpisodeKey('');
     }
+  }
+
+  function isCatVodRuntimeActive(site) {
+    return Boolean(catVodReady && catVodRuntimeRef.current && site?.id === 'catvod-runtime');
   }
 
   function renderLiveChannelFilters() {
@@ -1713,6 +1804,20 @@ export default function App() {
           />
         </View>
       </KeyboardAvoidingView>
+      {catVodExecutorHtml ? (
+        <WebView
+          javaScriptEnabled
+          onMessage={(event) => {
+            handleCatVodMessage(event).catch((bridgeError) =>
+              setMessage(bridgeError?.message || '插件执行器通信失败')
+            );
+          }}
+          originWhitelist={['*']}
+          ref={catVodWebViewRef}
+          source={{ html: catVodExecutorHtml }}
+          style={styles.hiddenWebView}
+        />
+      ) : null}
     </View>
   );
 }
@@ -2442,6 +2547,10 @@ function formatPluginVerifyStatus(value) {
     return '普通接口';
   }
 
+  if (value === 'script-manifest-only') {
+    return '缺脚本';
+  }
+
   if (value === 'repair-needed') {
     return '需修正';
   }
@@ -2483,6 +2592,14 @@ const styles = StyleSheet.create({
   },
   keyboardRoot: {
     flex: 1,
+  },
+  hiddenWebView: {
+    height: 1,
+    left: -9999,
+    opacity: 0,
+    position: 'absolute',
+    top: 0,
+    width: 1,
   },
   appShell: {
     flex: 1,

@@ -30,6 +30,7 @@ test('verifies CatVod script capabilities by static inspection only', async () =
     {
       ...result,
       scriptBytes: 1,
+      scriptText: 'script',
     },
     {
     ok: false,
@@ -40,6 +41,7 @@ test('verifies CatVod script capabilities by static inspection only', async () =
     message: '已下载脚本并完成静态能力识别；当前没有执行第三方脚本。',
     scriptUrl: 'https://cat.example.com/index.js.md5',
     scriptBytes: 1,
+    scriptText: 'script',
     capabilities: {
       home: 'detected',
       search: 'detected',
@@ -124,6 +126,24 @@ test('reports network failures when CatVod script cannot be downloaded', async (
   assert.equal(result.ok, false);
   assert.equal(result.status, 'network-error');
   assert.match(result.message, /HTTP 404/);
+});
+
+test('reports md5 hash files as non executable plugin manifests', async () => {
+  const result = await verifyPluginTarget(
+    {
+      kind: 'source',
+      url: 'https://cat.example.com/index.js.md5',
+    },
+    {
+      fetchImpl: async () => textResponse('742b32fc4443dad721ae85639c5e4c60'),
+    }
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 'script-manifest-only');
+  assert.equal(result.scriptBytes, 32);
+  assert.equal(result.scriptText, '');
+  assert.match(result.message, /MD5/);
 });
 
 function textResponse(body, status = 200) {
