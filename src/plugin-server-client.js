@@ -84,6 +84,14 @@ function formatPluginServerError(status, payload) {
     return '插件解析服务 Token 不正确或未填写，请检查设置里的 Token';
   }
 
+  if (code === 'PLUGIN_CONFIG_UNSUPPORTED') {
+    return '这个地址是 TVBox/OK 配置，不是可直接执行的 CatVod JS 插件；其中的 JAR/CSP 站点暂不兼容';
+  }
+
+  if (code === 'PLUGIN_SITE_INCOMPATIBLE' && /cookie/i.test(message)) {
+    return '该线路需要 Cookie 或扫码登录，当前测试版暂不兼容；请换一个搜索结果或插件源';
+  }
+
   if (status === 422 || code === 'PLUGIN_SITE_INCOMPATIBLE') {
     return `该站点暂不兼容服务端解析${message ? `：${message}` : ''}`;
   }

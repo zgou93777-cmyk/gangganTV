@@ -142,7 +142,28 @@ test('plugin server errors use clear Chinese messages', async () => {
             422
           )
       ),
-    /站点暂不兼容/
+    /Cookie|扫码/
+  );
+
+  await assert.rejects(
+    () =>
+      fetchPluginServerSearch(
+        {
+          baseUrl: 'https://parser.example.com',
+          scriptUrl: 'https://config.example.com/wex.json',
+        },
+        '仙逆',
+        async () =>
+          jsonResponse(
+            {
+              error: 'PLUGIN_CONFIG_UNSUPPORTED',
+              message:
+                'TVBox/OK JSON configs that depend on JAR/CSP plugins are not supported by the JS parser yet.',
+            },
+            422
+          )
+      ),
+    /TVBox|OK|CSP/
   );
 
   await assert.rejects(

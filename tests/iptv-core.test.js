@@ -86,7 +86,7 @@ test('classifies the built-in mock source as a config source', () => {
   });
 });
 
-test('parses TVBox config sites and routes searchable plugin sites to the server parser', () => {
+test('parses TVBox config sites and marks csp plugin sites as adapter-required', () => {
   const parsed = parseTvBoxConfig(
     {
       name: '测试配置',
@@ -124,9 +124,10 @@ test('parses TVBox config sites and routes searchable plugin sites to the server
     searchable: true,
     unsupportedReason: '',
   });
-  assert.equal(parsed.sites[1].runtime, 'catvod-server');
+  assert.equal(parsed.sites[1].runtime, 'tvbox-csp');
   assert.equal(parsed.sites[1].scriptUrl, 'csp_Demo');
-  assert.equal(parsed.sites[1].unsupportedReason, '');
+  assert.equal(parsed.sites[1].searchable, false);
+  assert.match(parsed.sites[1].unsupportedReason, /TVBox\/CSP/);
 });
 
 test('builds a config diagnostic summary for imported sources and sites', () => {

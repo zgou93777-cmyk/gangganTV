@@ -551,7 +551,12 @@ export default function App() {
           AsyncStorage.setItem(STORAGE_KEYS.configUrl, cleanUrl),
           saveJson(STORAGE_KEYS.configSources, nextSources),
         ]);
-        setMessage('已识别为插件源，当前版本不会执行第三方脚本');
+        loadPluginServerSite(pluginSource, cleanUrl);
+        setMessage(
+          pluginServerUrl.trim()
+            ? '已导入 CatVod 插件源，将使用插件解析服务搜索'
+            : '已导入 CatVod 插件源，请先填写插件解析服务地址和 Token'
+        );
         return;
       }
 
@@ -703,7 +708,9 @@ export default function App() {
       });
 
       setPluginVerifyResult(result);
-      if (
+      if (result.scriptUrl && pluginServerUrl.trim()) {
+        loadPluginServerSite(source, result.scriptUrl);
+      } else if (
         result.scriptText &&
         (result.sandboxPreflight?.ok ||
           result.sandboxPreflight?.compatibility?.runnable)
@@ -2625,6 +2632,17 @@ function normalizeStoredSites(items) {
       return site;
     }
 
+    if (isTvBoxCspSite(site)) {
+      return {
+        ...site,
+        runtime: 'tvbox-csp',
+        searchable: false,
+        unsupportedReason:
+          site.unsupportedReason ||
+          'TVBox/CSP JAR 插件站点暂不兼容，当前版本只支持 CatVod JS 插件源和普通 JSON API 站点',
+      };
+    }
+
     return {
       ...site,
       runtime: 'catvod-server',
@@ -2641,6 +2659,19 @@ function normalizeStoredSites(items) {
 function isPluginLikeSite(site) {
   const api = String(site?.api || site?.scriptUrl || '').trim().toLowerCase();
   return Number(site?.type) === 3 || /^csp_/i.test(api) || api.includes('.js');
+}
+
+function isTvBoxCspSite(site) {
+  const api = String(site?.api || site?.scriptUrl || '').trim();
+  const lowerApi = api.toLowerCase();
+  const isCatVodScript =
+    /^https?:\/\//i.test(api) &&
+    (lowerApi.includes('/cat/') ||
+      lowerApi.includes('cat.') ||
+      lowerApi.endsWith('.js') ||
+      lowerApi.endsWith('.js.md5'));
+
+  return (Number(site?.type) === 3 || /^csp_/i.test(api)) && !isCatVodScript;
 }
 
 function firstValidHttpUrl(values) {

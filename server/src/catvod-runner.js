@@ -7,6 +7,7 @@ const DEFAULT_SCRIPT_TIMEOUT_MS = 5_000;
 class CatVodRunner {
   constructor(options = {}) {
     this.fetchText = options.fetchText || fetchText;
+    this.scriptCache = options.scriptCache || new Map();
     this.scriptTimeoutMs = normalizeTimeoutMs(
       options.scriptTimeoutMs,
       DEFAULT_SCRIPT_TIMEOUT_MS
@@ -27,18 +28,18 @@ class CatVodRunner {
   }
 
   async call(method, payload) {
-    const scriptUrl = await resolveExecutableScriptUrl(payload?.scriptUrl, {
+    const script = await resolveExecutableScript(payload?.scriptUrl, {
+      cache: this.scriptCache,
       fetchText: this.fetchText,
     });
-    const scriptText = await this.fetchText(scriptUrl);
 
     return runWorker({
       method,
       payload: {
         ...payload,
-        scriptUrl,
+        scriptUrl: script.url,
       },
-      scriptText,
+      scriptText: script.text,
       scriptTimeoutMs: this.scriptTimeoutMs,
       timeoutMs: this.timeoutMs,
     });
@@ -46,19 +47,60 @@ class CatVodRunner {
 }
 
 async function resolveExecutableScriptUrl(scriptUrl, { fetchText: fetchTextImpl = fetchText } = {}) {
-  const cleanUrl = normalizeHttpUrl(scriptUrl, 'scriptUrl');
-  const text = await fetchTextImpl(cleanUrl);
+  const script = await resolveExecutableScript(scriptUrl, {
+    fetchText: fetchTextImpl,
+  });
+
+  return script.url;
+}
+
+async function resolveExecutableScript(
+  scriptUrl,
+  { cache = null, fetchText: fetchTextImpl = fetchText } = {}
+) {
+  const requestUrl = normalizePluginRequestUrl(scriptUrl, 'scriptUrl');
+  const cleanUrl = requestUrl.url;
+  const cachedScript = cache?.get(cleanUrl);
+
+  if (cachedScript) {
+    return cachedScript;
+  }
+
+  const requestOptions = buildFetchTextOptions(requestUrl);
+  const text = await fetchTextImpl(cleanUrl, requestOptions);
+
+  assertExecutableScriptText(text);
 
   if (!isMd5HashText(text)) {
-    return cleanUrl;
+    const script = {
+      text,
+      url: cleanUrl,
+    };
+    cache?.set(cleanUrl, script);
+    return script;
   }
 
   if (cleanUrl.toLowerCase().endsWith('.md5')) {
     const candidateUrl = cleanUrl.slice(0, -4);
-    const candidateText = await fetchTextImpl(candidateUrl);
+    const cachedCandidate = cache?.get(candidateUrl);
+
+    if (cachedCandidate) {
+      cache?.set(cleanUrl, cachedCandidate);
+      return cachedCandidate;
+    }
+
+    const candidateText = await fetchTextImpl(candidateUrl, requestOptions);
+
+    assertExecutableScriptText(candidateText);
 
     if (!isMd5HashText(candidateText)) {
-      return candidateUrl;
+      const script = {
+        text: candidateText,
+        url: candidateUrl,
+      };
+      cache?.set(cleanUrl, script);
+      cache?.set(candidateUrl, script);
+      return script;
     }
   }
 
@@ -68,11 +110,12 @@ async function resolveExecutableScriptUrl(scriptUrl, { fetchText: fetchTextImpl 
   });
 }
 
-async function fetchText(url) {
+async function fetchText(url, options = {}) {
   const response = await fetch(url, {
     headers: {
       Accept: 'text/plain, application/javascript;q=0.9, */*;q=0.8',
       'User-Agent': 'okhttp/4.10.0',
+      ...(options.headers || {}),
     },
   });
 
@@ -173,8 +216,92 @@ function normalizeHttpUrl(value, fieldName) {
   return cleanValue;
 }
 
+function normalizePluginRequestUrl(value, fieldName) {
+  const cleanValue = normalizeHttpUrl(value, fieldName);
+
+  try {
+    const parsedUrl = new URL(cleanValue);
+    const username = parsedUrl.username;
+    const password = parsedUrl.password;
+    let authorization = '';
+
+    if (username || password) {
+      authorization = `Basic ${Buffer.from(
+        `${decodeURIComponent(username)}:${decodeURIComponent(password)}`
+      ).toString('base64')}`;
+      parsedUrl.username = '';
+      parsedUrl.password = '';
+    }
+
+    return {
+      authorization,
+      url: parsedUrl.toString(),
+    };
+  } catch {
+    return {
+      authorization: '',
+      url: cleanValue,
+    };
+  }
+}
+
+function buildFetchTextOptions(requestUrl) {
+  if (!requestUrl?.authorization) {
+    return undefined;
+  }
+
+  return {
+    headers: {
+      Authorization: requestUrl.authorization,
+    },
+  };
+}
+
 function isMd5HashText(value) {
   return /^[a-f0-9]{32}$/i.test(String(value || '').trim());
+}
+
+function assertExecutableScriptText(value) {
+  const tvBoxConfig = parseTvBoxConfigText(value);
+
+  if (tvBoxConfig) {
+    const spider = String(tvBoxConfig.spider || '').toLowerCase();
+    const sites = Array.isArray(tvBoxConfig.sites) ? tvBoxConfig.sites : [];
+    const hasCspSites = sites.some((site) => {
+      const api = String(site?.api || '').trim();
+      return Number(site?.type) === 3 || /^csp_/i.test(api);
+    });
+
+    if (spider.includes('.jar') || hasCspSites) {
+      throw Object.assign(
+        new Error('TVBox/OK JSON configs that depend on JAR/CSP plugins are not supported by the JS parser yet.'),
+        {
+          code: 'PLUGIN_CONFIG_UNSUPPORTED',
+          statusCode: 422,
+        }
+      );
+    }
+  }
+}
+
+function parseTvBoxConfigText(value) {
+  const text = String(value || '').trim();
+
+  if (!text || (text[0] !== '{' && text[0] !== '[')) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Array.isArray(parsed.sites)) {
+      return parsed;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 function normalizeTimeoutMs(value, fallback) {
@@ -189,5 +316,6 @@ function normalizeTimeoutMs(value, fallback) {
 
 module.exports = {
   CatVodRunner,
+  resolveExecutableScript,
   resolveExecutableScriptUrl,
 };

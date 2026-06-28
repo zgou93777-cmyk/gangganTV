@@ -24,6 +24,33 @@ test('resolveExecutableScriptUrl converts md5 manifest urls to nearby js scripts
   ]);
 });
 
+test('resolveExecutableScriptUrl rejects TVBox JSON configs instead of executing them as JS', async () => {
+  await assert.rejects(
+    () =>
+      resolveExecutableScriptUrl('https://config.example.com/wex.json', {
+        fetchText: async () =>
+          JSON.stringify({
+            spider: 'https://example.com/spider.jar;md5;abc',
+            sites: [
+              {
+                key: 'Wex',
+                name: 'Wex',
+                type: 3,
+                api: 'csp_Wex',
+                searchable: 1,
+              },
+            ],
+          }),
+      }),
+    (error) => {
+      assert.equal(error.code, 'PLUGIN_CONFIG_UNSUPPORTED');
+      assert.equal(error.statusCode, 422);
+      assert.match(error.message, /TVBox\/OK/);
+      return true;
+    }
+  );
+});
+
 test('CatVodRunner calls plain function-style CatVod scripts in a worker', async () => {
   const runner = new CatVodRunner({
     fetchText: async () => `
@@ -59,6 +86,62 @@ test('CatVodRunner calls plain function-style CatVod scripts in a worker', async
   });
   assert.equal(detail.list[0].vod_play_url, 'Ep 1$token-1');
   assert.equal(play.url, 'https://media.example.com/token-1.m3u8');
+});
+
+test('CatVodRunner caches resolved script text across calls', async () => {
+  const calls = [];
+  const runner = new CatVodRunner({
+    fetchText: async (url) => {
+      calls.push(url);
+      return `
+        async function search(wd) {
+          return { list: [{ vod_id: wd, vod_name: wd }] };
+        }
+      `;
+    },
+    timeoutMs: 3000,
+  });
+
+  await runner.search({
+    keyword: 'One',
+    scriptUrl: 'https://cat.example.com/index.js',
+  });
+  await runner.search({
+    keyword: 'Two',
+    scriptUrl: 'https://cat.example.com/index.js',
+  });
+
+  assert.deepEqual(calls, ['https://cat.example.com/index.js']);
+});
+
+test('CatVodRunner downloads credentialed plugin urls with basic auth headers', async () => {
+  const calls = [];
+  const runner = new CatVodRunner({
+    fetchText: async (url, options) => {
+      calls.push({
+        authorization: options.headers.Authorization,
+        url,
+      });
+      return `
+        async function search(wd) {
+          return { list: [{ vod_id: wd, vod_name: wd }] };
+        }
+      `;
+    },
+    timeoutMs: 3000,
+  });
+
+  await runner.search({
+    keyword: 'Auth',
+    scriptUrl: 'http://user:pass@cat.example.com/index.js',
+  });
+
+  assert.deepEqual(calls, [
+    {
+      authorization: 'Basic dXNlcjpwYXNz',
+      url: 'http://cat.example.com/index.js',
+    },
+  ]);
 });
 
 test('CatVodRunner calls Fastify-style route plugins through injected routes', async () => {

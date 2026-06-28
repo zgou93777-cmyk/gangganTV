@@ -217,7 +217,8 @@ function normalizeSite(site, index) {
 
   const api = readableText(site.api);
   const type = Number.isFinite(Number(site.type)) ? Number(site.type) : 0;
-  const isPlugin = type === 3 || /^csp_/i.test(api) || api.toLowerCase().includes('.js');
+  const isCatVodScript = isCatVodScriptUrl(api);
+  const isTvBoxCsp = type === 3 || /^csp_/i.test(api);
 
   const siteKey = readableText(site.key) || `${readableText(site.name) || 'site'}-${index}`;
 
@@ -231,9 +232,15 @@ function normalizeSite(site, index) {
     unsupportedReason: '',
   };
 
-  if (isPlugin) {
+  if (isCatVodScript) {
     normalizedSite.runtime = 'catvod-server';
     normalizedSite.scriptUrl = api;
+  } else if (isTvBoxCsp) {
+    normalizedSite.runtime = 'tvbox-csp';
+    normalizedSite.scriptUrl = api;
+    normalizedSite.searchable = false;
+    normalizedSite.unsupportedReason =
+      'TVBox/CSP JAR 插件站点暂不兼容，当前版本只支持 CatVod JS 插件源和普通 JSON API 站点';
   }
 
   return normalizedSite;
@@ -408,6 +415,18 @@ function isTruthyFlag(value) {
   }
 
   return false;
+}
+
+function isCatVodScriptUrl(value) {
+  const lowerValue = readableText(value).toLowerCase();
+
+  return (
+    lowerValue.startsWith('http') &&
+    (lowerValue.includes('/cat/') ||
+      lowerValue.includes('cat.') ||
+      lowerValue.endsWith('.js') ||
+      lowerValue.endsWith('.js.md5'))
+  );
 }
 
 function hostnameFromUrl(value) {
