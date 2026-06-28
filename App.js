@@ -128,6 +128,8 @@ export default function App() {
   const [activeRegionFilter, setActiveRegionFilter] = useState('all');
   const [searchOverlayOpen, setSearchOverlayOpen] = useState(false);
   const [overlayKeyword, setOverlayKeyword] = useState('');
+  const [sourceFilterOpen, setSourceFilterOpen] = useState(false);
+  const [selectedSearchSourceIds, setSelectedSearchSourceIds] = useState([]);
   const [liveUrl, setLiveUrl] = useState('');
   const [livePlaylistUrl, setLivePlaylistUrl] = useState('');
   const [liveChannels, setLiveChannels] = useState([]);
@@ -2321,14 +2323,168 @@ export default function App() {
     );
   }
 
+  function renderSearchResultsPage() {
+    return (
+      <View style={styles.searchPage}>
+        <View style={styles.searchPageTopBar}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setActivePage('discover');
+              setSourceFilterOpen(false);
+            }}
+            style={({ pressed }) => [
+              styles.searchBackButton,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <Text style={styles.searchBackText}>‹</Text>
+          </Pressable>
+          <TextInput
+            autoCorrect={false}
+            onChangeText={setSearchKeyword}
+            onSubmitEditing={() =>
+              searchSelectedSite().catch(() => setMessage('搜索失败'))
+            }
+            placeholder="搜索影片"
+            placeholderTextColor="#8d96a0"
+            returnKeyType="search"
+            style={styles.searchPageInput}
+            value={searchKeyword}
+          />
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setSourceFilterOpen(true)}
+            style={({ pressed }) => [
+              styles.searchSourceButton,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <Text style={styles.searchSourceButtonText}>☰</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.searchPageBody}>
+          <View style={styles.searchPageRail}>
+            {renderSearchSourceRail()}
+          </View>
+          <ScrollView
+            contentContainerStyle={styles.searchPageResults}
+            showsVerticalScrollIndicator={false}
+          >
+            {loadingSearch ? (
+              <Text style={styles.emptyText}>正在搜索...</Text>
+            ) : searchResults.length || searchFailures.length ? (
+              renderVodResultGrid(vodResultCards)
+            ) : (
+              <View style={styles.searchEmptyState}>
+                <Text style={styles.sectionTitle}>输入关键词开始搜索</Text>
+                <Text style={styles.sectionHint}>
+                  默认搜索当前站点，后续会扩展为真正的全部源并发搜索。
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    );
+  }
+
+  function renderSourceFilterSheet() {
+    if (!sourceFilterOpen) {
+      return null;
+    }
+
+    const activeIds = selectedSearchSourceIds.length
+      ? selectedSearchSourceIds
+      : sites.map((site) => site.id);
+
+    return (
+      <View style={styles.overlayBackdrop}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setSourceFilterOpen(false)}
+          style={styles.overlayScrim}
+        />
+        <View style={styles.sourceFilterSheet}>
+          <View style={styles.overlayHandle} />
+          <Text style={styles.searchOverlayTitle}>选择配置源</Text>
+          <Text style={styles.sectionHint}>
+            当前版本先保存选择状态，搜索仍优先使用当前站点；多源并发搜索下一版接上。
+          </Text>
+          <ScrollView
+            contentContainerStyle={styles.sourceFilterList}
+            showsVerticalScrollIndicator={false}
+          >
+            {sites.length ? (
+              sites.map((site) => {
+                const isSelected = activeIds.includes(site.id);
+
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={site.id}
+                    onPress={() => {
+                      setSelectedSearchSourceIds((currentIds) => {
+                        const baseIds = currentIds.length
+                          ? currentIds
+                          : sites.map((item) => item.id);
+
+                        if (baseIds.includes(site.id)) {
+                          return baseIds.filter((id) => id !== site.id);
+                        }
+
+                        return [...baseIds, site.id];
+                      });
+                    }}
+                    style={({ pressed }) => [
+                      styles.sourceFilterItem,
+                      isSelected && styles.sourceFilterItemActive,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={styles.sourceFilterCheck}>
+                      {isSelected ? '✓' : ''}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.sourceFilterName}>
+                      {site.name}
+                    </Text>
+                  </Pressable>
+                );
+              })
+            ) : (
+              <Text style={styles.emptyText}>还没有导入配置源</Text>
+            )}
+          </ScrollView>
+          <CompactButton
+            onPress={() => setSourceFilterOpen(false)}
+            variant="accent"
+          >
+            完成
+          </CompactButton>
+        </View>
+      </View>
+    );
+  }
+
   return (
-    <View style={[styles.root, activeTab === 'settings' && styles.settingsRoot]}>
+    <View
+      style={[
+        styles.root,
+        activeTab === 'settings' && styles.settingsRoot,
+        activePage === 'searchResults' && styles.searchPageRoot,
+      ]}
+    >
       <StatusBar style="dark" />
       <KeyboardAvoidingView
         behavior={Platform.select({ ios: 'padding', android: undefined })}
         style={styles.keyboardRoot}
       >
         <View style={styles.appShell}>
+          {activePage === 'searchResults' ? (
+            renderSearchResultsPage()
+          ) : (
+            <>
           <ScrollView
             contentContainerStyle={styles.scrollContent}
             contentInsetAdjustmentBehavior="automatic"
@@ -2423,6 +2579,8 @@ export default function App() {
             onChange={setActiveTab}
             tabs={APP_TABS}
           />
+            </>
+          )}
         </View>
       </KeyboardAvoidingView>
       {catVodExecutorHtml ? (
@@ -2440,6 +2598,7 @@ export default function App() {
         />
       ) : null}
       {renderSearchOverlay()}
+      {renderSourceFilterSheet()}
     </View>
   );
 }
@@ -3285,6 +3444,9 @@ const styles = StyleSheet.create({
   settingsRoot: {
     backgroundColor: '#f2f2f7',
   },
+  searchPageRoot: {
+    backgroundColor: '#ffffff',
+  },
   keyboardRoot: {
     flex: 1,
   },
@@ -3298,6 +3460,7 @@ const styles = StyleSheet.create({
   },
   appShell: {
     flex: 1,
+    position: 'relative',
   },
   scrollContent: {
     gap: 14,
@@ -3882,6 +4045,79 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
+  searchPage: {
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingTop: TOP_SAFE_PADDING,
+  },
+  searchPageTopBar: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 70,
+    paddingBottom: 14,
+  },
+  searchBackButton: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#e5e7eb',
+    borderRadius: 28,
+    borderWidth: 1,
+    height: 56,
+    justifyContent: 'center',
+    width: 56,
+  },
+  searchBackText: {
+    color: '#050505',
+    fontSize: 44,
+    fontWeight: '300',
+    lineHeight: 48,
+  },
+  searchPageInput: {
+    backgroundColor: '#ffffff',
+    borderColor: '#e5e7eb',
+    borderRadius: 26,
+    borderWidth: 1,
+    color: '#111111',
+    flex: 1,
+    fontSize: 19,
+    letterSpacing: 0,
+    minHeight: 56,
+    paddingHorizontal: 22,
+  },
+  searchSourceButton: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#e5e7eb',
+    borderRadius: 28,
+    borderWidth: 1,
+    height: 56,
+    justifyContent: 'center',
+    width: 56,
+  },
+  searchSourceButtonText: {
+    color: '#111111',
+    fontSize: 25,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  searchPageBody: {
+    alignItems: 'flex-start',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 14,
+  },
+  searchPageRail: {
+    width: 112,
+  },
+  searchPageResults: {
+    flexGrow: 1,
+    paddingBottom: 40,
+  },
+  searchEmptyState: {
+    gap: 6,
+    paddingTop: 36,
+  },
   searchRail: {
     maxHeight: 560,
     width: 116,
@@ -3936,6 +4172,49 @@ const styles = StyleSheet.create({
   searchResultPane: {
     flex: 1,
     minWidth: 0,
+  },
+  sourceFilterSheet: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    bottom: 0,
+    boxShadow: '0 -18px 54px rgba(0, 0, 0, 0.18)',
+    gap: 14,
+    left: 0,
+    maxHeight: '72%',
+    padding: 20,
+    position: 'absolute',
+    right: 0,
+  },
+  sourceFilterList: {
+    gap: 9,
+    paddingBottom: 8,
+  },
+  sourceFilterItem: {
+    alignItems: 'center',
+    backgroundColor: '#f4f4f5',
+    borderRadius: 16,
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 48,
+    paddingHorizontal: 14,
+  },
+  sourceFilterItemActive: {
+    backgroundColor: '#e7f1ff',
+  },
+  sourceFilterCheck: {
+    color: '#2f80ed',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 0,
+    width: 22,
+  },
+  sourceFilterName: {
+    color: '#111111',
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0,
   },
   listStack: {
     gap: 8,
