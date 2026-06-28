@@ -1011,6 +1011,7 @@ export default function App() {
 
     setSelectedResult(result);
     setSelectedDetail(null);
+    setActivePage('detail');
     setLoadingDetailId(result.id);
     setMessage('正在读取播放列表');
 
@@ -2467,12 +2468,150 @@ export default function App() {
     );
   }
 
+  function renderPosterDetailPage() {
+    const playGroups = selectedDetail?.playGroups || [];
+    const primaryGroup = playGroups[0];
+    const primaryEpisode = primaryGroup?.episodes?.[0];
+
+    return (
+      <ScrollView
+        contentContainerStyle={styles.detailPageContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.detailHero}>
+          {selectedPosterDetail.heroImage ? (
+            <Image
+              resizeMode="cover"
+              source={{ uri: selectedPosterDetail.heroImage }}
+              style={styles.detailHeroImage}
+            />
+          ) : (
+            <View style={styles.detailHeroFallback}>
+              <Text style={styles.detailHeroFallbackText}>
+                {selectedPosterDetail.title.slice(0, 1)}
+              </Text>
+            </View>
+          )}
+          <View style={styles.detailHeroShade} />
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setActivePage('searchResults');
+              setLoadingDetailId('');
+            }}
+            style={({ pressed }) => [
+              styles.detailBackButton,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <Text style={styles.detailBackText}>‹</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.detailBody}>
+          <Text numberOfLines={2} style={styles.detailTitle}>
+            {selectedPosterDetail.title}
+          </Text>
+          {selectedPosterDetail.metaLine ? (
+            <Text numberOfLines={1} style={styles.detailMeta}>
+              {selectedPosterDetail.metaLine}
+            </Text>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            disabled={!primaryGroup || !primaryEpisode || Boolean(loadingEpisodeKey)}
+            onPress={() =>
+              playEpisode(primaryGroup, primaryEpisode, 0).catch(() =>
+                setMessage('播放地址解析失败')
+              )
+            }
+            style={({ pressed }) => [
+              styles.detailPlayButton,
+              (!primaryGroup || !primaryEpisode) && styles.buttonDisabled,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <Text style={styles.detailPlayIcon}>▶</Text>
+            <View>
+              <Text style={styles.detailPlayTitle}>
+                {loadingEpisodeKey ? '解析中' : '播放'}
+              </Text>
+              <Text numberOfLines={1} style={styles.detailPlaySubtitle}>
+                {primaryEpisode?.name || selectedPosterDetail.remarks || '暂无播放项'}
+              </Text>
+            </View>
+          </Pressable>
+
+          <View style={styles.detailActionRow}>
+            <Text style={styles.detailActionIcon}>⌕</Text>
+            <Text style={styles.detailActionIcon}>♡</Text>
+            <Text style={styles.detailActionIcon}>⋯</Text>
+          </View>
+
+          <Text numberOfLines={4} style={styles.detailDescription}>
+            {loadingDetailId ? '正在读取详情和播放列表...' : selectedPosterDetail.description}
+          </Text>
+
+          <View style={styles.detailLineHeader}>
+            <Text style={styles.detailLineTitle}>
+              {selectedPosterDetail.sourceName}
+            </Text>
+            <Text style={styles.detailLineArrow}>⌄</Text>
+          </View>
+
+          {playGroups.length ? (
+            <View style={styles.detailPlayGroups}>
+              {playGroups.map((group) => (
+                <View key={group.name} style={styles.detailPlayGroup}>
+                  <Text style={styles.detailGroupTitle}>{group.name}</Text>
+                  <View style={styles.detailEpisodeGrid}>
+                    {group.episodes.map((episode, episodeIndex) => {
+                      const episodeKey = `${group.name}-${episodeIndex}-${episode.name}`;
+
+                      return (
+                        <Pressable
+                          accessibilityRole="button"
+                          key={episodeKey}
+                          onPress={() =>
+                            playEpisode(group, episode, episodeIndex).catch(() =>
+                              setMessage('播放地址解析失败')
+                            )
+                          }
+                          style={({ pressed }) => [
+                            styles.detailEpisodeButton,
+                            pressed && styles.buttonPressed,
+                          ]}
+                        >
+                          <Text numberOfLines={1} style={styles.detailEpisodeTitle}>
+                            {loadingEpisodeKey === episodeKey ? '解析中' : episode.name}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.detailEmptyEpisodes}>
+              <Text style={styles.detailEmptyTitle}>
+                {loadingDetailId ? '正在加载播放项' : '暂无可播放列表'}
+              </Text>
+              <Text style={styles.detailEmptyText}>{message}</Text>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    );
+  }
+
   return (
     <View
       style={[
         styles.root,
         activeTab === 'settings' && styles.settingsRoot,
         activePage === 'searchResults' && styles.searchPageRoot,
+        activePage === 'detail' && styles.detailPageRoot,
       ]}
     >
       <StatusBar style="dark" />
@@ -2481,7 +2620,9 @@ export default function App() {
         style={styles.keyboardRoot}
       >
         <View style={styles.appShell}>
-          {activePage === 'searchResults' ? (
+          {activePage === 'detail' ? (
+            renderPosterDetailPage()
+          ) : activePage === 'searchResults' ? (
             renderSearchResultsPage()
           ) : (
             <>
@@ -3447,6 +3588,9 @@ const styles = StyleSheet.create({
   searchPageRoot: {
     backgroundColor: '#ffffff',
   },
+  detailPageRoot: {
+    backgroundColor: '#160f0f',
+  },
   keyboardRoot: {
     flex: 1,
   },
@@ -4215,6 +4359,196 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     letterSpacing: 0,
+  },
+  detailPageContent: {
+    backgroundColor: '#160f0f',
+    minHeight: '100%',
+    paddingBottom: 46,
+  },
+  detailHero: {
+    height: 520,
+    overflow: 'hidden',
+    position: 'relative',
+    width: '100%',
+  },
+  detailHeroImage: {
+    height: '100%',
+    width: '100%',
+  },
+  detailHeroFallback: {
+    alignItems: 'center',
+    backgroundColor: '#2f2424',
+    height: '100%',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  detailHeroFallbackText: {
+    color: '#ffffff',
+    fontSize: 92,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  detailHeroShade: {
+    backgroundColor: 'rgba(22, 15, 15, 0.42)',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  detailBackButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.78)',
+    borderRadius: 31,
+    height: 62,
+    justifyContent: 'center',
+    left: 18,
+    position: 'absolute',
+    top: TOP_SAFE_PADDING,
+    width: 62,
+  },
+  detailBackText: {
+    color: '#050505',
+    fontSize: 50,
+    fontWeight: '300',
+    lineHeight: 54,
+  },
+  detailBody: {
+    gap: 22,
+    marginTop: -136,
+    paddingHorizontal: 22,
+  },
+  detailTitle: {
+    color: '#ffffff',
+    fontSize: 58,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 64,
+    textAlign: 'center',
+  },
+  detailMeta: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 0,
+    textAlign: 'center',
+  },
+  detailPlayButton: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: '#f7f7f8',
+    borderRadius: 16,
+    flexDirection: 'row',
+    gap: 14,
+    justifyContent: 'center',
+    minHeight: 74,
+    paddingHorizontal: 34,
+    width: '96%',
+  },
+  detailPlayIcon: {
+    color: '#050505',
+    fontSize: 30,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  detailPlayTitle: {
+    color: '#050505',
+    fontSize: 23,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  detailPlaySubtitle: {
+    color: '#4b5563',
+    fontSize: 16,
+    letterSpacing: 0,
+    maxWidth: 260,
+  },
+  detailActionRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 66,
+  },
+  detailActionIcon: {
+    color: '#ffffff',
+    fontSize: 42,
+    fontWeight: '500',
+    letterSpacing: 0,
+  },
+  detailDescription: {
+    color: 'rgba(255, 255, 255, 0.86)',
+    fontSize: 16,
+    letterSpacing: 0,
+    lineHeight: 25,
+  },
+  detailLineHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  detailLineTitle: {
+    color: '#ffffff',
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  detailLineArrow: {
+    color: 'rgba(255, 255, 255, 0.72)',
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  detailPlayGroups: {
+    gap: 18,
+  },
+  detailPlayGroup: {
+    gap: 12,
+  },
+  detailGroupTitle: {
+    color: 'rgba(255, 255, 255, 0.82)',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  detailEpisodeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  detailEpisodeButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.13)',
+    borderColor: 'rgba(255, 255, 255, 0.72)',
+    borderRadius: 18,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 74,
+    paddingHorizontal: 16,
+    width: '47.8%',
+  },
+  detailEpisodeTitle: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  detailEmptyEpisodes: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 18,
+    gap: 6,
+    padding: 16,
+  },
+  detailEmptyTitle: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  detailEmptyText: {
+    color: 'rgba(255, 255, 255, 0.72)',
+    fontSize: 13,
+    letterSpacing: 0,
+    lineHeight: 19,
   },
   listStack: {
     gap: 8,
