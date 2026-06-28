@@ -142,6 +142,26 @@ test('plugin server errors use clear Chinese messages', async () => {
             422
           )
       ),
+    /插件环境|适配器|cookie/
+  );
+
+  await assert.rejects(
+    () =>
+      fetchPluginServerSearch(
+        {
+          baseUrl: 'https://parser.example.com',
+          scriptUrl: 'https://cat.example.com/index.js',
+        },
+        '仙逆',
+        async () =>
+          jsonResponse(
+            {
+              error: 'PLUGIN_SITE_INCOMPATIBLE',
+              message: 'This source requires cookie login.',
+            },
+            422
+          )
+      ),
     /Cookie|扫码/
   );
 

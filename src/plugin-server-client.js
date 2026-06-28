@@ -88,8 +88,12 @@ function formatPluginServerError(status, payload) {
     return '这个地址是 TVBox/OK 配置，不是可直接执行的 CatVod JS 插件；其中的 JAR/CSP 站点暂不兼容';
   }
 
-  if (code === 'PLUGIN_SITE_INCOMPATIBLE' && /cookie/i.test(message)) {
+  if (code === 'PLUGIN_SITE_INCOMPATIBLE' && isCookieLoginRequired(message)) {
     return '该线路需要 Cookie 或扫码登录，当前测试版暂不兼容；请换一个搜索结果或插件源';
+  }
+
+  if (code === 'PLUGIN_SITE_INCOMPATIBLE' && isMissingCookieRuntimeObject(message)) {
+    return `插件环境缺少 cookie 兼容对象，属于适配器问题，不代表该源一定需要扫码：${message}`;
   }
 
   if (status === 422 || code === 'PLUGIN_SITE_INCOMPATIBLE') {
@@ -105,6 +109,18 @@ function formatPluginServerError(status, payload) {
   }
 
   return `插件解析服务请求失败：HTTP ${status}${message ? ` ${message}` : ''}`;
+}
+
+function isCookieLoginRequired(message) {
+  return /(?:requires?|need|missing|invalid).{0,24}cookie|cookie.{0,24}(?:login|登录|扫码|required|missing|invalid)|扫码|登录/i.test(
+    message || ''
+  );
+}
+
+function isMissingCookieRuntimeObject(message) {
+  return /reading ['"]cookie['"]|read propert(?:y|ies).*cookie|undefined.*cookie/i.test(
+    message || ''
+  );
 }
 
 function buildPluginServerUrl(baseUrl, path) {
