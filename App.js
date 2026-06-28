@@ -81,6 +81,10 @@ const {
   fetchTvBoxServerPlay,
   fetchTvBoxServerSearch,
 } = require('./src/tvbox-server-client');
+const {
+  buildSearchBuckets,
+  filterResultsByBucket,
+} = require('./src/search-buckets');
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
@@ -131,6 +135,8 @@ export default function App() {
   const [selectedSiteId, setSelectedSiteId] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [searchFailures, setSearchFailures] = useState([]);
+  const [activeSearchBucketId, setActiveSearchBucketId] = useState('all');
   const [selectedResult, setSelectedResult] = useState(null);
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [activeType, setActiveType] = useState('live');
@@ -191,9 +197,22 @@ export default function App() {
       }),
     [liveChannelKeyword, liveChannels, selectedLiveGroup]
   );
+  const searchBuckets = useMemo(
+    () =>
+      buildSearchBuckets({
+        sites,
+        results: searchResults,
+        failures: searchFailures,
+      }),
+    [searchFailures, searchResults, sites]
+  );
+  const visibleSearchResults = useMemo(
+    () => filterResultsByBucket(searchResults, activeSearchBucketId),
+    [activeSearchBucketId, searchResults]
+  );
   const vodResultCards = useMemo(
-    () => buildVodResultCards(searchResults),
-    [searchResults]
+    () => buildVodResultCards(visibleSearchResults),
+    [visibleSearchResults]
   );
   const watchingSummary = useMemo(
     () =>
@@ -900,6 +919,8 @@ export default function App() {
     setLoadingSearch(true);
     setActiveType('config');
     setMessage('正在搜索');
+    setSearchFailures([]);
+    setActiveSearchBucketId('all');
 
     try {
       const results = isTvBoxSpiderSite(selectedSite)
@@ -924,6 +945,13 @@ export default function App() {
       setMessage(results.length ? `找到 ${results.length} 个结果` : '没有搜索结果');
     } catch (searchError) {
       setSearchResults([]);
+      setSearchFailures([
+        {
+          sourceId: selectedSite.id,
+          sourceName: selectedSite.name,
+          message: searchError?.message || '搜索失败',
+        },
+      ]);
       setSelectedResult(null);
       setSelectedDetail(null);
       setMessage(searchError?.message || '搜索失败');
@@ -1264,44 +1292,10 @@ export default function App() {
           {loadingSearch ? '搜索中' : '搜索'}
         </CompactButton>
 
-        {searchResults.length ? (
-          <View style={styles.vodGrid}>
-            {vodResultCards.map((card) => (
-              <Pressable
-                accessibilityRole="button"
-                key={card.id}
-                onPress={() => loadDetail(card.raw)}
-                style={({ pressed }) => [
-                  styles.vodCard,
-                  selectedResult?.id === card.raw.id && styles.vodCardActive,
-                  pressed && styles.buttonPressed,
-                ]}
-              >
-                <View style={styles.posterFrame}>
-                  {card.poster ? (
-                    <Image
-                      resizeMode="cover"
-                      source={{ uri: card.poster }}
-                      style={styles.posterImage}
-                    />
-                  ) : (
-                    <View style={styles.posterPlaceholder}>
-                      <Text style={styles.posterPlaceholderText}>
-                        {card.title.slice(0, 1)}
-                      </Text>
-                    </View>
-                  )}
-                  {card.badge ? (
-                    <Text numberOfLines={1} style={styles.posterBadge}>
-                      {card.badge}
-                    </Text>
-                  ) : null}
-                </View>
-                <Text numberOfLines={2} style={styles.vodCardTitle}>
-                  {loadingDetailId === card.raw.id ? '读取中...' : card.title}
-                </Text>
-              </Pressable>
-            ))}
+        {searchResults.length || searchFailures.length ? (
+          <View style={styles.searchSplit}>
+            {renderSearchSourceRail()}
+            <View style={styles.searchResultPane}>{renderVodResultGrid(vodResultCards)}</View>
           </View>
         ) : null}
 
@@ -1341,6 +1335,103 @@ export default function App() {
             ))}
           </View>
         ) : null}
+      </View>
+    );
+  }
+
+  function renderSearchSourceRail() {
+    if (!searchBuckets.length) {
+      return null;
+    }
+
+    return (
+      <ScrollView
+        contentContainerStyle={styles.searchRailContent}
+        showsVerticalScrollIndicator={false}
+        style={styles.searchRail}
+      >
+        {searchBuckets.map((bucket) => {
+          const isActive = activeSearchBucketId === bucket.id;
+
+          return (
+            <Pressable
+              accessibilityRole="button"
+              key={bucket.id}
+              onPress={() => setActiveSearchBucketId(bucket.id)}
+              style={({ pressed }) => [
+                styles.searchRailItem,
+                isActive && styles.searchRailItemActive,
+                bucket.status === 'failed' && styles.searchRailItemFailed,
+                pressed && styles.buttonPressed,
+              ]}
+            >
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.searchRailLabel,
+                  isActive && styles.searchRailLabelActive,
+                ]}
+              >
+                {bucket.label}
+              </Text>
+              <Text
+                style={[
+                  styles.searchRailCount,
+                  isActive && styles.searchRailCountActive,
+                ]}
+              >
+                {bucket.id === 'all' ? `${bucket.count}/${bucket.total}` : bucket.count}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    );
+  }
+
+  function renderVodResultGrid(cards) {
+    if (!cards.length) {
+      return <Text style={styles.emptyText}>当前源没有匹配结果</Text>;
+    }
+
+    return (
+      <View style={styles.vodGrid}>
+        {cards.map((card) => (
+          <Pressable
+            accessibilityRole="button"
+            key={card.id}
+            onPress={() => loadDetail(card.raw)}
+            style={({ pressed }) => [
+              styles.vodCard,
+              selectedResult?.id === card.raw.id && styles.vodCardActive,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <View style={styles.posterFrame}>
+              {card.poster ? (
+                <Image
+                  resizeMode="cover"
+                  source={{ uri: card.poster }}
+                  style={styles.posterImage}
+                />
+              ) : (
+                <View style={styles.posterPlaceholder}>
+                  <Text style={styles.posterPlaceholderText}>
+                    {card.title.slice(0, 1)}
+                  </Text>
+                </View>
+              )}
+              {card.badge ? (
+                <Text numberOfLines={1} style={styles.posterBadge}>
+                  {card.badge}
+                </Text>
+              ) : null}
+            </View>
+            <Text numberOfLines={2} style={styles.vodCardTitle}>
+              {loadingDetailId === card.raw.id ? '读取中...' : card.title}
+            </Text>
+          </Pressable>
+        ))}
       </View>
     );
   }
@@ -3374,6 +3465,66 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.55,
+  },
+  searchSplit: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  searchRail: {
+    maxHeight: 560,
+    width: 116,
+  },
+  searchRailContent: {
+    gap: 8,
+    paddingBottom: 12,
+  },
+  searchRailItem: {
+    alignItems: 'center',
+    backgroundColor: '#f6f7f9',
+    borderRadius: 8,
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'space-between',
+    minHeight: 42,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  searchRailItemActive: {
+    backgroundColor: '#2f80ed',
+  },
+  searchRailItemFailed: {
+    opacity: 0.58,
+  },
+  searchRailLabel: {
+    color: '#111827',
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0,
+  },
+  searchRailLabelActive: {
+    color: '#ffffff',
+  },
+  searchRailCount: {
+    backgroundColor: '#f6a953',
+    borderRadius: 8,
+    color: '#111827',
+    fontSize: 12,
+    fontVariant: ['tabular-nums'],
+    minWidth: 24,
+    overflow: 'hidden',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    textAlign: 'center',
+  },
+  searchRailCountActive: {
+    backgroundColor: '#ffffff',
+    color: '#2f80ed',
+  },
+  searchResultPane: {
+    flex: 1,
+    minWidth: 0,
   },
   listStack: {
     gap: 8,
