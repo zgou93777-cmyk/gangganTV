@@ -57,6 +57,9 @@ const {
 const {
   diagnosePluginSite,
 } = require('./src/plugin-diagnostics');
+const {
+  verifyPluginTarget,
+} = require('./src/plugin-adapter');
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
@@ -121,6 +124,8 @@ export default function App() {
   const [siteTestKeyword, setSiteTestKeyword] = useState('test');
   const [testingSites, setTestingSites] = useState(false);
   const [batchSiteTestResult, setBatchSiteTestResult] = useState(null);
+  const [verifyingPlugin, setVerifyingPlugin] = useState(false);
+  const [pluginVerifyResult, setPluginVerifyResult] = useState(null);
 
   const player = useVideoPlayer(null, (videoPlayer) => {
     videoPlayer.loop = false;
@@ -616,6 +621,59 @@ export default function App() {
       );
     } finally {
       setTestingSites(false);
+    }
+  }
+
+  async function verifySelectedPlugin() {
+    if (!selectedSite) {
+      setMessage('请先选择一个插件站点');
+      setPluginVerifyResult(null);
+      return;
+    }
+
+    setVerifyingPlugin(true);
+    setPluginVerifyResult(null);
+    setActiveType('config');
+    setMessage(`正在验证插件站点：${selectedSite.name}`);
+
+    try {
+      const result = await verifyPluginTarget({
+        kind: 'site',
+        site: selectedSite,
+      });
+
+      setPluginVerifyResult(result);
+      setMessage(result.message);
+    } catch (verifyError) {
+      setMessage(verifyError?.message || '插件站点验证失败');
+    } finally {
+      setVerifyingPlugin(false);
+    }
+  }
+
+  async function verifyPluginSource(source) {
+    if (!source?.url) {
+      setMessage('插件源缺少地址');
+      return;
+    }
+
+    setVerifyingPlugin(true);
+    setPluginVerifyResult(null);
+    setActiveType('config');
+    setMessage(`正在验证插件源：${source.name || source.url}`);
+
+    try {
+      const result = await verifyPluginTarget({
+        kind: 'source',
+        url: source.url,
+      });
+
+      setPluginVerifyResult(result);
+      setMessage(result.message);
+    } catch (verifyError) {
+      setMessage(verifyError?.message || '插件源验证失败');
+    } finally {
+      setVerifyingPlugin(false);
     }
   }
 
@@ -1445,7 +1503,11 @@ export default function App() {
             />
           ) : null}
           <ConfigDiagnosticsPanel diagnostics={configDiagnostics} />
-          <SourceList sources={configSources} />
+          <SourceList
+            onVerifyPlugin={verifyPluginSource}
+            sources={configSources}
+            verifyingPlugin={verifyingPlugin}
+          />
         </View>
 
         <View style={styles.settingsSectionLabelWrap}>
@@ -1481,6 +1543,15 @@ export default function App() {
             {testingSite ? '测试中' : '测试当前站点'}
           </CompactButton>
           <CompactButton
+            disabled={!selectedSite || verifyingPlugin}
+            onPress={() =>
+              verifySelectedPlugin().catch(() => setMessage('插件验证失败'))
+            }
+            variant="secondary"
+          >
+            {verifyingPlugin ? '验证中' : '验证插件适配'}
+          </CompactButton>
+          <CompactButton
             disabled={!configDiagnostics.searchableSites || testingSites}
             onPress={() =>
               testAllSearchableSites().catch(() => setMessage('批量测试失败'))
@@ -1493,6 +1564,9 @@ export default function App() {
             <BatchSiteTestResultPanel batch={batchSiteTestResult} />
           ) : null}
           {siteTestResult ? <SiteTestResultPanel result={siteTestResult} /> : null}
+          {pluginVerifyResult ? (
+            <PluginVerifyResultPanel result={pluginVerifyResult} />
+          ) : null}
           {renderSiteList()}
         </View>
 
@@ -2047,6 +2121,42 @@ function PluginDiagnosticSummary({ compact = false, diagnostic }) {
   );
 }
 
+function PluginVerifyResultPanel({ result }) {
+  const panelStyle =
+    result.ok || result.status === 'sandbox-required'
+      ? styles.siteTestPanelPassed
+      : styles.siteTestPanelFailed;
+
+  return (
+    <View style={[styles.siteTestPanel, panelStyle]}>
+      <View style={styles.pluginDiagnosticHeader}>
+        <Text style={styles.siteTestTitle}>{result.title}</Text>
+        <Text style={styles.pluginDiagnosticBadge}>
+          {formatPluginVerifyStatus(result.status)}
+        </Text>
+      </View>
+      <Text selectable style={styles.siteTestMessage}>
+        {result.message}
+      </Text>
+      <View style={styles.siteTestGrid}>
+        <DiagnosticTile label="运行时" value={result.runtime || '-'} />
+        <DiagnosticTile label="目标" value={result.targetKind === 'site' ? '站点' : '脚本'} />
+        <DiagnosticTile label="脚本字节" value={result.scriptBytes || 0} />
+        <DiagnosticTile label="状态" value={formatPluginVerifyStatus(result.status)} />
+      </View>
+      {result.scriptUrl ? (
+        <Text numberOfLines={2} selectable style={styles.rowMeta}>
+          {result.scriptUrl}
+        </Text>
+      ) : null}
+      <CapabilityDots capabilities={result.capabilities} />
+      <Text selectable style={styles.pluginDiagnosticNext}>
+        {result.nextStep}
+      </Text>
+    </View>
+  );
+}
+
 function CapabilityDots({ capabilities }) {
   const entries = [
     ['home', '首页'],
@@ -2059,7 +2169,8 @@ function CapabilityDots({ capabilities }) {
     <View style={styles.capabilityRow}>
       {entries.map(([key, label]) => {
         const status = capabilities?.[key] || 'unknown';
-        const isKnown = status === 'supported' || status === 'declared';
+        const isKnown =
+          status === 'supported' || status === 'declared' || status === 'detected';
 
         return (
           <View
@@ -2093,7 +2204,7 @@ function DiagnosticTile({ label, value }) {
   );
 }
 
-function SourceList({ sources }) {
+function SourceList({ onVerifyPlugin, sources, verifyingPlugin }) {
   if (!sources.length) {
     return null;
   }
@@ -2108,9 +2219,27 @@ function SourceList({ sources }) {
               {source.url}
             </Text>
           </View>
-          <Text style={[styles.badge, source.kind === 'plugin' && styles.badgeMuted]}>
-            {source.kind === 'plugin' ? '插件源' : '配置'}
-          </Text>
+          {source.kind === 'plugin' && onVerifyPlugin ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={verifyingPlugin}
+              onPress={() => onVerifyPlugin(source)}
+              style={({ pressed }) => [
+                styles.inlineActionButton,
+                styles.inlineActionButtonMuted,
+                verifyingPlugin && styles.buttonDisabled,
+                pressed && styles.buttonPressed,
+              ]}
+            >
+              <Text style={styles.inlineActionText}>
+                {verifyingPlugin ? '验证中' : '验证'}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text style={[styles.badge, source.kind === 'plugin' && styles.badgeMuted]}>
+              {source.kind === 'plugin' ? '插件源' : '配置'}
+            </Text>
+          )}
         </View>
       ))}
     </View>
@@ -2266,6 +2395,30 @@ function formatPluginCompatibility(value) {
   return '待验证';
 }
 
+function formatPluginVerifyStatus(value) {
+  if (value === 'sandbox-required') {
+    return '需沙盒';
+  }
+
+  if (value === 'adapter-required') {
+    return '需适配';
+  }
+
+  if (value === 'network-error') {
+    return '网络失败';
+  }
+
+  if (value === 'supported-json-api') {
+    return '普通接口';
+  }
+
+  if (value === 'repair-needed') {
+    return '需修正';
+  }
+
+  return '待验证';
+}
+
 function formatCapabilityStatus(value) {
   if (value === 'supported') {
     return '可用';
@@ -2273,6 +2426,10 @@ function formatCapabilityStatus(value) {
 
   if (value === 'declared') {
     return '声明';
+  }
+
+  if (value === 'detected') {
+    return '检测到';
   }
 
   return '未知';
@@ -3162,6 +3319,9 @@ const styles = StyleSheet.create({
     minHeight: 34,
     minWidth: 54,
     paddingHorizontal: 10,
+  },
+  inlineActionButtonMuted: {
+    backgroundColor: '#2f80ed',
   },
   inlineActionText: {
     color: '#ffffff',
