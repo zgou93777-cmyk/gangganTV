@@ -4,8 +4,13 @@ const test = require('node:test');
 const {
   APP_TABS,
   DEFAULT_TAB_ID,
+  DISCOVER_FEED_TABS,
   DISCOVER_MODES,
+  DISCOVER_REGION_FILTERS,
+  DISCOVER_SORT_FILTERS,
+  buildDiscoverPosterFeed,
   buildLiveChannelGroups,
+  buildPosterDetailModel,
   buildVodResultCards,
   buildWatchingSummary,
   filterLiveChannels,
@@ -38,6 +43,46 @@ test('defines discover content modes for the home category rail', () => {
       ['direct', '直链播放'],
     ]
   );
+});
+
+test('defines MiraPlay discover categories and filters', () => {
+  assert.deepEqual(
+    DISCOVER_FEED_TABS.map((tab) => tab.label),
+    ['热门内容', '热门电视', '热门综艺', '电影', '电视']
+  );
+  assert.equal(DISCOVER_SORT_FILTERS[0].label, '排序');
+  assert.equal(DISCOVER_REGION_FILTERS[1].label, '华语');
+});
+
+test('builds demo discover posters with stable card fields', () => {
+  const posters = buildDiscoverPosterFeed();
+
+  assert.equal(posters.length >= 9, true);
+  assert.deepEqual(Object.keys(posters[0]).sort(), [
+    'id',
+    'poster',
+    'rating',
+    'subtitle',
+    'title',
+  ]);
+});
+
+test('normalizes a selected search result into detail view data', () => {
+  const detail = buildPosterDetailModel({
+    name: '痴迷',
+    poster: 'https://img.example.com/obsession.jpg',
+    remarks: 'HD中字',
+    sourceName: '瓜子',
+    year: '2026',
+    type: '恐怖 / 惊悚',
+    duration: '108分钟',
+    description: '测试简介',
+  });
+
+  assert.equal(detail.title, '痴迷');
+  assert.equal(detail.heroImage, 'https://img.example.com/obsession.jpg');
+  assert.equal(detail.metaLine, '2026 · 恐怖 / 惊悚 · 108分钟');
+  assert.equal(detail.sourceName, '瓜子');
 });
 
 test('returns the requested tab or falls back to discover', () => {
