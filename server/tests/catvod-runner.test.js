@@ -144,6 +144,36 @@ test('CatVodRunner downloads credentialed plugin urls with basic auth headers', 
   ]);
 });
 
+test('resolveExecutableScriptUrl handles credentialed md5 plugin mirrors', async () => {
+  const calls = [];
+  const url = await resolveExecutableScriptUrl(
+    'http://wexfnw:wexfnw@cat.999888987.xyz/index.js.md5',
+    {
+      fetchText: async (candidate, options = {}) => {
+        calls.push({
+          authorization: options.headers?.Authorization || '',
+          url: candidate,
+        });
+        return candidate.endsWith('.md5')
+          ? '742b32fc4443dad721ae85639c5e4c60'
+          : 'module.exports = {};';
+      },
+    }
+  );
+
+  assert.equal(url, 'http://cat.999888987.xyz/index.js');
+  assert.deepEqual(calls, [
+    {
+      authorization: 'Basic d2V4Zm53OndleGZudw==',
+      url: 'http://cat.999888987.xyz/index.js.md5',
+    },
+    {
+      authorization: 'Basic d2V4Zm53OndleGZudw==',
+      url: 'http://cat.999888987.xyz/index.js',
+    },
+  ]);
+});
+
 test('CatVodRunner calls Fastify-style route plugins through injected routes', async () => {
   const runner = new CatVodRunner({
     fetchText: async () => `

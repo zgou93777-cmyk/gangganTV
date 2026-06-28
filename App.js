@@ -96,7 +96,8 @@ const {
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
-const RECOMMENDED_CATVOD_SOURCE_URL = 'https://9280.kstore.vip/cat/index.js.md5';
+const RECOMMENDED_CATVOD_SOURCE_URL =
+  'http://wexfnw:wexfnw@cat.999888987.xyz/index.js.md5';
 const LOCAL_PARSER_HINT_URL = 'http://192.168.220.41:3000';
 const TOP_SAFE_PADDING = Platform.select({
   ios: 54,
@@ -608,8 +609,8 @@ export default function App() {
         loadPluginServerSite(pluginSource, cleanUrl);
         setMessage(
           pluginServerUrl.trim()
-            ? '已导入 CatVod 插件源，将使用插件解析服务搜索'
-            : '已导入 CatVod 插件源，请先填写插件解析服务地址和 Token'
+            ? '已导入 CatVod 插件源，将使用本地解析器搜索'
+            : '已导入 CatVod 插件源，请先填写本地解析器地址'
         );
         return;
       }

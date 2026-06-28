@@ -88,9 +88,11 @@ async function scanConfigSourceCandidate(candidate, { fetchImpl, now }) {
       input: candidate.input,
       url: candidate.url,
       kind: 'plugin',
-      ok: false,
+      ok: true,
       status: 'plugin-source',
-      message: '这是 CatVod/魔力云播插件源，当前版本只识别，不执行第三方脚本。',
+      message: '这是 CatVod/魔力云播插件源，可导入后通过本地解析器搜索。',
+      searchableCount: 1,
+      pluginCount: 1,
       pluginDiagnostic: diagnosePluginSource(candidate.url),
     });
   }

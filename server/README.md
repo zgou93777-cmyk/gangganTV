@@ -52,10 +52,17 @@ For local Expo Go testing, keep the parser on this computer:
 1. Start the parser with `npm --prefix server start`.
 2. In the app settings, tap "使用本机解析器地址" or enter the LAN URL manually.
 3. Leave Token empty unless `PLUGIN_SERVER_TOKEN` was set before starting the parser.
-4. Tap "导入 CatVod 测试源" to add `https://9280.kstore.vip/cat/index.js.md5`.
+4. Tap "导入 CatVod 测试源" to add
+   `http://wexfnw:wexfnw@cat.999888987.xyz/index.js.md5`.
 
-This CatVod source has been verified locally for search and detail retrieval.
-Some returned play lines are netdisk resources and may time out or require account
+This CatVod mirror has been verified locally for search and detail retrieval.
+The OK影视 root URLs such as `http://tv.999888987.xyz/` and
+`http://new.999888987.xyz/` also resolve to TVBox JSON configs, but their sites
+are Android `csp_*` Spider/JAR entries. They can be imported and listed before
+the Spider runtime exists, but search/play is expected to stay disabled until
+`tvboxRuntime` becomes `true`.
+
+Some CatVod play lines are netdisk resources and may time out or require account
 capabilities, so a timeout from `/catvod/play` does not mean the video player is
 broken.
 
