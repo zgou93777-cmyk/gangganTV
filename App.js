@@ -34,8 +34,13 @@ const {
 const {
   APP_TABS,
   DEFAULT_TAB_ID,
+  DISCOVER_FEED_TABS,
   DISCOVER_MODES,
+  DISCOVER_REGION_FILTERS,
+  DISCOVER_SORT_FILTERS,
+  buildDiscoverPosterFeed,
   buildLiveChannelGroups,
+  buildPosterDetailModel,
   buildVodResultCards,
   buildWatchingSummary,
   filterLiveChannels,
@@ -116,7 +121,13 @@ const LABELS = {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState(DEFAULT_TAB_ID);
+  const [activePage, setActivePage] = useState('discover');
   const [activeDiscoverMode, setActiveDiscoverMode] = useState('all');
+  const [activeFeedTab, setActiveFeedTab] = useState('hot');
+  const [activeSortFilter, setActiveSortFilter] = useState('heat');
+  const [activeRegionFilter, setActiveRegionFilter] = useState('all');
+  const [searchOverlayOpen, setSearchOverlayOpen] = useState(false);
+  const [overlayKeyword, setOverlayKeyword] = useState('');
   const [liveUrl, setLiveUrl] = useState('');
   const [livePlaylistUrl, setLivePlaylistUrl] = useState('');
   const [liveChannels, setLiveChannels] = useState([]);
@@ -186,6 +197,7 @@ export default function App() {
 
   const activeTabMeta = useMemo(() => getTabById(activeTab), [activeTab]);
   const currentLabel = useMemo(() => LABELS[activeType] || '播放', [activeType]);
+  const discoverPosterFeed = useMemo(() => buildDiscoverPosterFeed(), []);
   const liveChannelGroups = useMemo(
     () => buildLiveChannelGroups(liveChannels),
     [liveChannels]
@@ -214,6 +226,10 @@ export default function App() {
   const vodResultCards = useMemo(
     () => buildVodResultCards(visibleSearchResults),
     [visibleSearchResults]
+  );
+  const selectedPosterDetail = useMemo(
+    () => buildPosterDetailModel(selectedResult, selectedDetail),
+    [selectedDetail, selectedResult]
   );
   const watchingSummary = useMemo(
     () =>
@@ -902,8 +918,11 @@ export default function App() {
     }
   }
 
-  async function searchSelectedSite() {
-    const cleanKeyword = searchKeyword.trim();
+  async function searchSelectedSite(keywordOverride) {
+    const cleanKeyword =
+      typeof keywordOverride === 'string'
+        ? keywordOverride.trim()
+        : searchKeyword.trim();
     setSourceMenuOpen(false);
 
     if (!selectedSite) {
@@ -960,6 +979,26 @@ export default function App() {
     } finally {
       setLoadingSearch(false);
     }
+  }
+
+  async function submitOverlaySearch() {
+    const cleanKeyword = overlayKeyword.trim();
+
+    if (!cleanKeyword) {
+      setMessage('请输入搜索关键词');
+      return;
+    }
+
+    setSearchOverlayOpen(false);
+    setSearchKeyword(cleanKeyword);
+    setActivePage('searchResults');
+    setActiveTab('discover');
+    await searchWithKeyword(cleanKeyword);
+  }
+
+  async function searchWithKeyword(keyword) {
+    setSearchKeyword(keyword);
+    await searchSelectedSite(keyword);
   }
 
   async function loadDetail(result) {
@@ -1559,6 +1598,160 @@ export default function App() {
     );
   }
 
+  function renderDiscoverFeedRail() {
+    return (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.discoverModeScroller}
+      >
+        <View style={styles.discoverModeRow}>
+          {DISCOVER_FEED_TABS.map((tab) => {
+            const isActive = activeFeedTab === tab.id;
+
+            return (
+              <Pressable
+                accessibilityRole="button"
+                key={tab.id}
+                onPress={() => setActiveFeedTab(tab.id)}
+                style={({ pressed }) => [
+                  styles.discoverModeButton,
+                  pressed && styles.buttonPressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.discoverModeText,
+                    isActive && styles.discoverModeTextActive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </ScrollView>
+    );
+  }
+
+  function renderDiscoverFilters() {
+    return (
+      <View style={styles.discoverFilterStack}>
+        <View style={styles.discoverFilterRow}>
+          {DISCOVER_SORT_FILTERS.map((filter) => {
+            const isActive = activeSortFilter === filter.id;
+
+            return (
+              <Pressable
+                accessibilityRole="button"
+                key={filter.id}
+                onPress={() => {
+                  if (!filter.muted) {
+                    setActiveSortFilter(filter.id);
+                  }
+                }}
+                style={({ pressed }) => [
+                  filter.muted ? styles.filterLabelPill : styles.homeFilterChip,
+                  isActive && !filter.muted && styles.homeFilterChipActive,
+                  pressed && styles.buttonPressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    filter.muted ? styles.filterLabelText : styles.homeFilterChipText,
+                    isActive && !filter.muted && styles.homeFilterChipTextActive,
+                  ]}
+                >
+                  {filter.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={styles.discoverFilterRow}>
+          <View style={styles.filterLabelPill}>
+            <Text style={styles.filterLabelText}>地区</Text>
+          </View>
+          {DISCOVER_REGION_FILTERS.map((filter) => {
+            const isActive = activeRegionFilter === filter.id;
+
+            return (
+              <Pressable
+                accessibilityRole="button"
+                key={filter.id}
+                onPress={() => setActiveRegionFilter(filter.id)}
+                style={({ pressed }) => [
+                  styles.homeFilterChip,
+                  isActive && styles.homeFilterChipActive,
+                  pressed && styles.buttonPressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.homeFilterChipText,
+                    isActive && styles.homeFilterChipTextActive,
+                  ]}
+                >
+                  {filter.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+
+  function renderDiscoverPosterGrid() {
+    return (
+      <View style={styles.discoverPosterGrid}>
+        {discoverPosterFeed.map((poster) => (
+          <Pressable
+            accessibilityRole="button"
+            key={poster.id}
+            onPress={() => {
+              setSelectedResult({
+                id: poster.id,
+                name: poster.title,
+                poster: poster.poster,
+                remarks: poster.subtitle,
+                sourceName: selectedSite?.name || '豆瓣热播',
+                year: '2026',
+                type: poster.subtitle,
+                duration: poster.rating ? `评分 ${poster.rating}` : '',
+                description:
+                  '热门内容流仅用于首页展示。搜索结果进入详情后会读取对应来源的播放线路和剧集。',
+              });
+              setSelectedDetail(null);
+              setActivePage('detail');
+            }}
+            style={({ pressed }) => [
+              styles.discoverPosterCard,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <View style={styles.discoverPosterFrame}>
+              <Image
+                resizeMode="cover"
+                source={{ uri: poster.poster }}
+                style={styles.posterImage}
+              />
+              {poster.rating ? (
+                <Text numberOfLines={1} style={styles.discoverRatingBadge}>
+                  评分：{poster.rating}
+                </Text>
+              ) : null}
+            </View>
+            <Text numberOfLines={1} style={styles.discoverPosterTitle}>
+              {poster.title}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    );
+  }
+
   function renderDirectPanel() {
     return (
       <View style={styles.panel}>
@@ -1636,53 +1829,11 @@ export default function App() {
   }
 
   function renderDiscover() {
-    const showDirect =
-      activeDiscoverMode === 'direct';
-    const showLive =
-      activeDiscoverMode === 'live';
-    const showVod =
-      activeDiscoverMode === 'all' || activeDiscoverMode === 'vod';
-
     return (
-      <View style={styles.tabContent}>
-        {renderDiscoverModeRail()}
-
-        {activeDiscoverMode === 'all' ? (
-          <View style={styles.quickGrid}>
-            <QuickAction
-              label="测试直播"
-              onPress={() =>
-                importBuiltInLivePlaylist().catch(() =>
-                  setMessage('测试直播列表导入失败')
-                )
-              }
-              value="m3u"
-            />
-            <QuickAction
-              label="测试配置"
-              onPress={() =>
-                importBuiltInTestSource().catch(() => setMessage('测试源导入失败'))
-              }
-              value="TVBox"
-            />
-            <QuickAction
-              label="配置接口"
-              onPress={() => setActiveTab('settings')}
-              value="导入"
-            />
-            <QuickAction
-              label="继续播放"
-              onPress={() =>
-                continueLatestPlay().catch(() => setMessage('继续播放失败'))
-              }
-              value={isPlaying ? '暂停' : '播放'}
-            />
-          </View>
-        ) : null}
-
-        {showVod ? renderSearchPanel() : null}
-        {showLive ? renderLivePanel() : null}
-        {showDirect ? renderDirectPanel() : null}
+      <View style={styles.discoverFeed}>
+        {renderDiscoverFeedRail()}
+        {renderDiscoverFilters()}
+        {renderDiscoverPosterGrid()}
       </View>
     );
   }
@@ -2115,6 +2266,61 @@ export default function App() {
     return renderDiscover();
   }
 
+  function renderSearchOverlay() {
+    if (!searchOverlayOpen) {
+      return null;
+    }
+
+    return (
+      <View style={styles.overlayBackdrop}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setSearchOverlayOpen(false)}
+          style={styles.overlayScrim}
+        />
+        <KeyboardAvoidingView
+          behavior={Platform.select({ ios: 'padding', android: undefined })}
+          style={styles.searchOverlayCenter}
+        >
+          <View style={styles.searchOverlayCard}>
+            <View style={styles.overlayHandle} />
+            <Text style={styles.searchOverlayTitle}>搜索全部来源</Text>
+            <TextInput
+              autoFocus
+              autoCorrect={false}
+              onChangeText={setOverlayKeyword}
+              onSubmitEditing={() =>
+                submitOverlaySearch().catch(() => setMessage('搜索失败'))
+              }
+              placeholder="输入片名、演员或关键词"
+              placeholderTextColor="#8d96a0"
+              returnKeyType="search"
+              style={styles.searchOverlayInput}
+              value={overlayKeyword}
+            />
+            <View style={styles.buttonRow}>
+              <CompactButton
+                onPress={() => setSearchOverlayOpen(false)}
+                variant="plain"
+              >
+                取消
+              </CompactButton>
+              <CompactButton
+                disabled={loadingSearch}
+                onPress={() =>
+                  submitOverlaySearch().catch(() => setMessage('搜索失败'))
+                }
+                variant="accent"
+              >
+                {loadingSearch ? '搜索中' : '搜索'}
+              </CompactButton>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.root, activeTab === 'settings' && styles.settingsRoot]}>
       <StatusBar style="dark" />
@@ -2149,8 +2355,8 @@ export default function App() {
                     accessibilityRole="button"
                     onPress={() => {
                       setSourceMenuOpen(false);
-                      setActiveTab('discover');
-                      setActiveDiscoverMode('vod');
+                      setOverlayKeyword(searchKeyword);
+                      setSearchOverlayOpen(true);
                     }}
                     style={({ pressed }) => [
                       styles.circleButton,
@@ -2169,7 +2375,7 @@ export default function App() {
               ) : null}
             </View>
 
-            {currentUrl ? (
+            {activeTab !== 'discover' && currentUrl ? (
               <>
                 <View style={styles.playerShell}>
                   <VideoView
@@ -2196,7 +2402,7 @@ export default function App() {
                   </View>
                 </View>
               </>
-            ) : (
+            ) : activeTab !== 'discover' ? (
               <View style={styles.idleStatusPanel}>
                 <View style={styles.idleStatusIconWrap}>
                   <Text style={styles.idleStatusIcon}>▶</Text>
@@ -2208,7 +2414,7 @@ export default function App() {
                   </Text>
                 </View>
               </View>
-            )}
+            ) : null}
 
             {renderActiveTab()}
           </ScrollView>
@@ -2233,6 +2439,7 @@ export default function App() {
           style={styles.hiddenWebView}
         />
       ) : null}
+      {renderSearchOverlay()}
     </View>
   );
 }
@@ -3330,6 +3537,90 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '900',
   },
+  discoverFeed: {
+    gap: 20,
+  },
+  discoverFilterStack: {
+    gap: 12,
+  },
+  discoverFilterRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  filterLabelPill: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 36,
+  },
+  filterLabelText: {
+    color: '#111111',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 0,
+  },
+  homeFilterChip: {
+    alignItems: 'center',
+    backgroundColor: '#eeeeef',
+    borderRadius: 10,
+    justifyContent: 'center',
+    minHeight: 36,
+    paddingHorizontal: 14,
+  },
+  homeFilterChipActive: {
+    backgroundColor: '#dfeeff',
+  },
+  homeFilterChipText: {
+    color: '#111111',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 0,
+  },
+  homeFilterChipTextActive: {
+    color: '#1769d7',
+  },
+  discoverPosterGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 18,
+  },
+  discoverPosterCard: {
+    gap: 8,
+    width: '29.9%',
+  },
+  discoverPosterFrame: {
+    aspectRatio: 0.72,
+    backgroundColor: '#e5e5ea',
+    borderRadius: 7,
+    overflow: 'hidden',
+    position: 'relative',
+    width: '100%',
+  },
+  discoverRatingBadge: {
+    backgroundColor: '#f49a2f',
+    borderBottomLeftRadius: 7,
+    borderTopRightRadius: 7,
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0,
+    maxWidth: '82%',
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  discoverPosterTitle: {
+    color: '#111111',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
   statsGrid: {
     flexDirection: 'row',
     gap: 8,
@@ -4153,5 +4444,56 @@ const styles = StyleSheet.create({
   },
   bottomTabTextActive: {
     color: '#2f80ed',
+  },
+  overlayBackdrop: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 100,
+  },
+  overlayScrim: {
+    backgroundColor: 'rgba(0, 0, 0, 0.34)',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  searchOverlayCenter: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 26,
+  },
+  searchOverlayCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 28,
+    boxShadow: '0 24px 60px rgba(0, 0, 0, 0.22)',
+    gap: 16,
+    padding: 20,
+  },
+  overlayHandle: {
+    alignSelf: 'center',
+    backgroundColor: '#d1d5db',
+    borderRadius: 2,
+    height: 4,
+    width: 44,
+  },
+  searchOverlayTitle: {
+    color: '#111111',
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 0,
+    textAlign: 'center',
+  },
+  searchOverlayInput: {
+    backgroundColor: '#f2f2f7',
+    borderRadius: 19,
+    color: '#111111',
+    fontSize: 18,
+    letterSpacing: 0,
+    minHeight: 54,
+    paddingHorizontal: 18,
   },
 });
