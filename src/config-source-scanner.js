@@ -5,6 +5,10 @@ const {
 const {
   fetchTvBoxConfig,
 } = require('./iptv-api');
+const {
+  diagnosePluginSite,
+  diagnosePluginSource,
+} = require('./plugin-diagnostics');
 
 function extractConfigSourceCandidates(text) {
   if (typeof text !== 'string') {
@@ -73,6 +77,7 @@ async function scanConfigSourceCandidate(candidate, { fetchImpl, now }) {
       ok: false,
       status: 'invalid-url',
       message: candidate?.reason || '链接格式错误。',
+      pluginDiagnostic: diagnosePluginSource(candidate?.input || ''),
     });
   }
 
@@ -86,6 +91,7 @@ async function scanConfigSourceCandidate(candidate, { fetchImpl, now }) {
       ok: false,
       status: 'plugin-source',
       message: '这是 CatVod/魔力云播插件源，当前版本只识别，不执行第三方脚本。',
+      pluginDiagnostic: diagnosePluginSource(candidate.url),
     });
   }
 
@@ -108,6 +114,7 @@ async function scanConfigSourceCandidate(candidate, { fetchImpl, now }) {
       siteCount: parsed.sites.length,
       searchableCount: diagnostics.searchableSites,
       pluginCount: diagnostics.pluginSites,
+      pluginDiagnostics: buildPluginSiteDiagnostics(parsed.sites),
     });
   } catch (error) {
     return buildResult({
@@ -137,6 +144,12 @@ function classifyConfigScanFailure(error) {
   }
 
   return 'invalid-config';
+}
+
+function buildPluginSiteDiagnostics(sites) {
+  return (sites || [])
+    .filter((site) => site?.unsupportedReason || Number(site?.type) === 3)
+    .map((site) => diagnosePluginSite(site));
 }
 
 function extractHttpTokens(text) {
@@ -182,6 +195,8 @@ function buildResult({
   siteCount = 0,
   searchableCount = 0,
   pluginCount = 0,
+  pluginDiagnostic = null,
+  pluginDiagnostics = [],
 }) {
   return {
     input,
@@ -195,6 +210,8 @@ function buildResult({
     siteCount,
     searchableCount,
     pluginCount,
+    pluginDiagnostic,
+    pluginDiagnostics,
   };
 }
 

@@ -53,6 +53,9 @@ const {
 const {
   scanConfigSourceText,
 } = require('./src/config-source-scanner');
+const {
+  diagnosePluginSite,
+} = require('./src/plugin-diagnostics');
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
@@ -813,37 +816,12 @@ export default function App() {
     return (
       <View style={styles.listStack}>
         {sites.map((site) => (
-          <Pressable
-            accessibilityRole="button"
+          <SiteRow
+            isActive={selectedSiteId === site.id}
             key={site.id}
             onPress={() => selectSite(site)}
-            style={({ pressed }) => [
-              styles.listRow,
-              selectedSiteId === site.id && styles.listRowActive,
-              pressed && styles.buttonPressed,
-            ]}
-          >
-            <View style={styles.rowMain}>
-              <Text style={styles.rowTitle}>{site.name}</Text>
-              <Text numberOfLines={1} selectable style={styles.rowMeta}>
-                {site.sourceName || '配置'} · {formatSiteType(site.type)}
-              </Text>
-              {site.unsupportedReason ? (
-                <Text selectable style={styles.warningText}>
-                  {site.unsupportedReason}
-                </Text>
-              ) : null}
-            </View>
-            <Text
-              style={[styles.badge, site.unsupportedReason && styles.badgeMuted]}
-            >
-              {site.unsupportedReason
-                ? '插件'
-                : site.searchable
-                  ? '可搜索'
-                  : '未声明'}
-            </Text>
-          </Pressable>
+            site={site}
+          />
         ))}
       </View>
     );
@@ -1797,6 +1775,39 @@ function SummaryRow({ compact = false, label, selectable = false, value }) {
   );
 }
 
+function SiteRow({ isActive, onPress, site }) {
+  const pluginDiagnostic = site?.unsupportedReason ? diagnosePluginSite(site) : null;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.listRow,
+        isActive && styles.listRowActive,
+        pressed && styles.buttonPressed,
+      ]}
+    >
+      <View style={styles.rowMain}>
+        <Text style={styles.rowTitle}>{site.name}</Text>
+        <Text numberOfLines={1} selectable style={styles.rowMeta}>
+          {site.sourceName || '配置'} · {formatSiteType(site.type)}
+        </Text>
+        {pluginDiagnostic ? (
+          <PluginDiagnosticSummary diagnostic={pluginDiagnostic} compact />
+        ) : site.unsupportedReason ? (
+          <Text selectable style={styles.warningText}>
+            {site.unsupportedReason}
+          </Text>
+        ) : null}
+      </View>
+      <Text style={[styles.badge, site.unsupportedReason && styles.badgeMuted]}>
+        {site.unsupportedReason ? '插件' : site.searchable ? '可搜索' : '未声明'}
+      </Text>
+    </Pressable>
+  );
+}
+
 function ConfigDiagnosticsPanel({ diagnostics }) {
   return (
     <View style={styles.diagnosticsPanel}>
@@ -1954,6 +1965,25 @@ function ConfigSourceScanResultPanel({ onImport, results }) {
                   ? ` 可搜索 ${result.searchableCount}，插件/不兼容 ${result.pluginCount}`
                   : ''}
               </Text>
+              {result.pluginDiagnostic ? (
+                <PluginDiagnosticSummary diagnostic={result.pluginDiagnostic} />
+              ) : null}
+              {result.pluginDiagnostics?.length ? (
+                <View style={styles.pluginDiagnosticStack}>
+                  {result.pluginDiagnostics.slice(0, 3).map((diagnostic, index) => (
+                    <PluginDiagnosticSummary
+                      compact
+                      diagnostic={diagnostic}
+                      key={`${diagnostic.kind}-${index}`}
+                    />
+                  ))}
+                  {result.pluginDiagnostics.length > 3 ? (
+                    <Text style={styles.pluginDiagnosticMore}>
+                      还有 {result.pluginDiagnostics.length - 3} 个插件站点需要适配
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
             {result.ok ? (
               <Pressable
@@ -1974,6 +2004,76 @@ function ConfigSourceScanResultPanel({ onImport, results }) {
           </View>
         ))}
       </View>
+    </View>
+  );
+}
+
+function PluginDiagnosticSummary({ compact = false, diagnostic }) {
+  if (!diagnostic) {
+    return null;
+  }
+
+  return (
+    <View
+      style={[
+        styles.pluginDiagnostic,
+        compact && styles.pluginDiagnosticCompact,
+      ]}
+    >
+      <View style={styles.pluginDiagnosticHeader}>
+        <Text style={styles.pluginDiagnosticTitle}>{diagnostic.title}</Text>
+        <Text style={styles.pluginDiagnosticBadge}>
+          {formatPluginCompatibility(diagnostic.compatibility)}
+        </Text>
+      </View>
+      <Text selectable style={styles.pluginDiagnosticText}>
+        {diagnostic.summary}
+      </Text>
+      {!compact ? (
+        <>
+          <CapabilityDots capabilities={diagnostic.capabilities} />
+          <Text selectable style={styles.pluginDiagnosticNext}>
+            {diagnostic.nextStep}
+          </Text>
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+function CapabilityDots({ capabilities }) {
+  const entries = [
+    ['home', '首页'],
+    ['search', '搜索'],
+    ['detail', '详情'],
+    ['play', '播放'],
+  ];
+
+  return (
+    <View style={styles.capabilityRow}>
+      {entries.map(([key, label]) => {
+        const status = capabilities?.[key] || 'unknown';
+        const isKnown = status === 'supported' || status === 'declared';
+
+        return (
+          <View
+            key={key}
+            style={[
+              styles.capabilityPill,
+              isKnown && styles.capabilityPillKnown,
+            ]}
+          >
+            <Text
+              style={[
+                styles.capabilityText,
+                isKnown && styles.capabilityTextKnown,
+              ]}
+            >
+              {label} {formatCapabilityStatus(status)}
+            </Text>
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -2138,6 +2238,38 @@ function formatConfigSourceStatus(status) {
   }
 
   return '不可用';
+}
+
+function formatPluginCompatibility(value) {
+  if (value === 'requires-sandbox') {
+    return '需沙盒';
+  }
+
+  if (value === 'requires-adapter') {
+    return '需适配';
+  }
+
+  if (value === 'repair-needed') {
+    return '需修正';
+  }
+
+  if (value === 'supported') {
+    return '可尝试';
+  }
+
+  return '待验证';
+}
+
+function formatCapabilityStatus(value) {
+  if (value === 'supported') {
+    return '可用';
+  }
+
+  if (value === 'declared') {
+    return '声明';
+  }
+
+  return '未知';
 }
 
 const styles = StyleSheet.create({
@@ -2913,6 +3045,87 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0,
     lineHeight: 18,
+  },
+  pluginDiagnostic: {
+    backgroundColor: '#fff7ed',
+    borderColor: '#fed7aa',
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 7,
+    padding: 10,
+  },
+  pluginDiagnosticCompact: {
+    gap: 5,
+    padding: 8,
+  },
+  pluginDiagnosticHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  pluginDiagnosticTitle: {
+    color: '#111111',
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  pluginDiagnosticBadge: {
+    backgroundColor: '#ffedd5',
+    borderRadius: 10,
+    color: '#c2410c',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0,
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  pluginDiagnosticText: {
+    color: '#7c2d12',
+    fontSize: 12,
+    letterSpacing: 0,
+    lineHeight: 17,
+  },
+  pluginDiagnosticNext: {
+    color: '#9a3412',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0,
+    lineHeight: 17,
+  },
+  pluginDiagnosticStack: {
+    gap: 8,
+  },
+  pluginDiagnosticMore: {
+    color: '#9a3412',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  capabilityRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  capabilityPill: {
+    backgroundColor: '#fef3c7',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  capabilityPillKnown: {
+    backgroundColor: '#dcfce7',
+  },
+  capabilityText: {
+    color: '#92400e',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  capabilityTextKnown: {
+    color: '#166534',
   },
   siteTestGrid: {
     flexDirection: 'row',

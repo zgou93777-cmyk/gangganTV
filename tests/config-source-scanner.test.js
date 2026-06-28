@@ -131,8 +131,11 @@ test('scanConfigSourceText classifies TVBox configs, plugin sources, invalid url
   assert.equal(results[0].source.name, 'Config One');
   assert.equal(results[0].sites.length, 2);
   assert.match(results[1].message, /插件/);
+  assert.equal(results[1].pluginDiagnostic.compatibility, 'requires-sandbox');
+  assert.equal(results[1].pluginDiagnostic.executable, false);
   assert.match(results[2].message, /HTTP 503/);
   assert.match(results[3].message, /链接格式错误/);
+  assert.equal(results[3].pluginDiagnostic.compatibility, 'repair-needed');
 });
 
 test('scanConfigSourceText explains configs that only contain plugin sites', async () => {
@@ -154,6 +157,8 @@ test('scanConfigSourceText explains configs that only contain plugin sites', asy
   assert.equal(results[0].siteCount, 1);
   assert.equal(results[0].searchableCount, 0);
   assert.equal(results[0].pluginCount, 1);
+  assert.equal(results[0].pluginDiagnostics.length, 1);
+  assert.equal(results[0].pluginDiagnostics[0].compatibility, 'requires-adapter');
   assert.equal(
     results[0].message,
     '可导入配置，识别到 1 个站点；但都是插件源，当前版本只展示，不执行本地搜索。'
