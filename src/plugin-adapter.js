@@ -2,6 +2,9 @@ const {
   diagnosePluginSite,
   diagnosePluginSource,
 } = require('./plugin-diagnostics');
+const {
+  preflightPluginSandbox,
+} = require('./plugin-sandbox');
 
 async function verifyPluginTarget(target, { fetchImpl = fetch } = {}) {
   if (target?.kind === 'site') {
@@ -66,6 +69,7 @@ async function verifyPluginSource(url, { fetchImpl }) {
   try {
     const scriptText = await fetchPluginScript(cleanUrl, fetchImpl);
     const capabilities = inspectScriptCapabilities(scriptText);
+    const sandboxPreflight = preflightPluginSandbox(scriptText);
 
     return {
       ok: false,
@@ -77,6 +81,7 @@ async function verifyPluginSource(url, { fetchImpl }) {
       scriptUrl: cleanUrl,
       scriptBytes: scriptText.length,
       capabilities,
+      sandboxPreflight,
       nextStep: '下一步需要受限 JS 沙盒验证这些函数能否安全运行，再尝试解析最终播放地址。',
     };
   } catch (error) {

@@ -46,9 +46,38 @@ test('verifies CatVod script capabilities by static inspection only', async () =
       detail: 'detected',
       play: 'detected',
     },
+    sandboxPreflight: {
+      ok: true,
+      status: 'sandbox-preflight-passed',
+      title: '沙盒预检通过',
+      message: '脚本没有发现明显危险能力，可以进入受限执行器技术验证。',
+      blockedTokens: [],
+      allowedApis: ['fetch', 'JSON', 'URL', 'URLSearchParams', 'TextEncoder', 'TextDecoder'],
+      nextStep: '下一步在隔离执行层中只暴露网络请求和基础字符串/JSON 能力，验证 search/detail/play 是否能返回最终播放地址。',
+    },
     nextStep: '下一步需要受限 JS 沙盒验证这些函数能否安全运行，再尝试解析最终播放地址。',
     }
   );
+});
+
+test('includes sandbox preflight blockers for unsafe CatVod scripts', async () => {
+  const result = await verifyPluginTarget(
+    {
+      kind: 'source',
+      url: 'https://cat.example.com/index.js.md5',
+    },
+    {
+      fetchImpl: async () => textResponse(`
+        async function search(wd) { return eval(wd); }
+        async function play(flag, id) { return new Function(id)(); }
+      `),
+    }
+  );
+
+  assert.equal(result.status, 'sandbox-required');
+  assert.equal(result.sandboxPreflight.ok, false);
+  assert.deepEqual(result.sandboxPreflight.blockedTokens, ['eval', 'Function']);
+  assert.match(result.sandboxPreflight.message, /eval, Function/);
 });
 
 test('verifies TVBox plugin sites as adapter-required without fetching scripts', async () => {

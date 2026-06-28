@@ -2150,6 +2150,36 @@ function PluginVerifyResultPanel({ result }) {
         </Text>
       ) : null}
       <CapabilityDots capabilities={result.capabilities} />
+      {result.sandboxPreflight ? (
+        <View
+          style={[
+            styles.pluginDiagnostic,
+            result.sandboxPreflight.ok
+              ? styles.sandboxPreflightPassed
+              : styles.sandboxPreflightBlocked,
+          ]}
+        >
+          <View style={styles.pluginDiagnosticHeader}>
+            <Text style={styles.pluginDiagnosticTitle}>
+              {result.sandboxPreflight.title}
+            </Text>
+            <Text style={styles.pluginDiagnosticBadge}>
+              {formatPluginVerifyStatus(result.sandboxPreflight.status)}
+            </Text>
+          </View>
+          <Text selectable style={styles.pluginDiagnosticText}>
+            {result.sandboxPreflight.message}
+          </Text>
+          {result.sandboxPreflight.blockedTokens?.length ? (
+            <Text selectable style={styles.pluginDiagnosticNext}>
+              阻断能力：{result.sandboxPreflight.blockedTokens.join(' / ')}
+            </Text>
+          ) : null}
+          <Text selectable style={styles.pluginDiagnosticNext}>
+            允许能力：{result.sandboxPreflight.allowedApis.join(' / ')}
+          </Text>
+        </View>
+      ) : null}
       <Text selectable style={styles.pluginDiagnosticNext}>
         {result.nextStep}
       </Text>
@@ -2414,6 +2444,14 @@ function formatPluginVerifyStatus(value) {
 
   if (value === 'repair-needed') {
     return '需修正';
+  }
+
+  if (value === 'sandbox-preflight-passed') {
+    return '预检通过';
+  }
+
+  if (value === 'sandbox-preflight-blocked') {
+    return '已阻断';
   }
 
   return '待验证';
@@ -3216,6 +3254,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 5,
     padding: 8,
+  },
+  sandboxPreflightPassed: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#a7f3d0',
+  },
+  sandboxPreflightBlocked: {
+    backgroundColor: '#fff1f2',
+    borderColor: '#fecdd3',
   },
   pluginDiagnosticCompact: {
     gap: 4,
