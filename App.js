@@ -1137,36 +1137,38 @@ export default function App() {
       <View style={styles.tabContent}>
         {renderDiscoverModeRail()}
 
-        <View style={styles.quickGrid}>
-          <QuickAction
-            label="测试直播"
-            onPress={() =>
-              importBuiltInLivePlaylist().catch(() =>
-                setMessage('测试直播列表导入失败')
-              )
-            }
-            value="m3u"
-          />
-          <QuickAction
-            label="测试配置"
-            onPress={() =>
-              importBuiltInTestSource().catch(() => setMessage('测试源导入失败'))
-            }
-            value="TVBox"
-          />
-          <QuickAction
-            label="配置接口"
-            onPress={() => setActiveTab('settings')}
-            value="导入"
-          />
-          <QuickAction
-            label="继续播放"
-            onPress={() =>
-              continueLatestPlay().catch(() => setMessage('继续播放失败'))
-            }
-            value={isPlaying ? '暂停' : '播放'}
-          />
-        </View>
+        {activeDiscoverMode === 'all' ? (
+          <View style={styles.quickGrid}>
+            <QuickAction
+              label="测试直播"
+              onPress={() =>
+                importBuiltInLivePlaylist().catch(() =>
+                  setMessage('测试直播列表导入失败')
+                )
+              }
+              value="m3u"
+            />
+            <QuickAction
+              label="测试配置"
+              onPress={() =>
+                importBuiltInTestSource().catch(() => setMessage('测试源导入失败'))
+              }
+              value="TVBox"
+            />
+            <QuickAction
+              label="配置接口"
+              onPress={() => setActiveTab('settings')}
+              value="导入"
+            />
+            <QuickAction
+              label="继续播放"
+              onPress={() =>
+                continueLatestPlay().catch(() => setMessage('继续播放失败'))
+              }
+              value={isPlaying ? '暂停' : '播放'}
+            />
+          </View>
+        ) : null}
 
         {showVod ? renderSearchPanel() : null}
         {showLive ? renderLivePanel() : null}
@@ -1194,8 +1196,18 @@ export default function App() {
                     : '未播放'
               }
             />
-            <SummaryRow label="直播地址" value={liveUrl || '未保存'} selectable />
-            <SummaryRow label="点播地址" value={vodUrl || '未保存'} selectable />
+            <SummaryRow
+              label="直播地址"
+              value={liveUrl || '未保存'}
+              selectable
+              compact
+            />
+            <SummaryRow
+              label="点播地址"
+              value={vodUrl || '未保存'}
+              selectable
+              compact
+            />
             <SummaryRow
               label="当前站点"
               value={selectedSite ? selectedSite.name : '未选择'}
@@ -1770,14 +1782,14 @@ function StatTile({ label, value }) {
   );
 }
 
-function SummaryRow({ label, selectable = false, value }) {
+function SummaryRow({ compact = false, label, selectable = false, value }) {
   return (
     <View style={styles.summaryRow}>
       <Text style={styles.summaryLabel}>{label}</Text>
       <Text
-        numberOfLines={selectable ? undefined : 1}
+        numberOfLines={compact ? 2 : selectable ? undefined : 1}
         selectable={selectable}
-        style={styles.summaryValue}
+        style={[styles.summaryValue, compact && styles.summaryValueCompact]}
       >
         {value}
       </Text>
@@ -2143,13 +2155,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    gap: 18,
+    gap: 14,
     padding: 16,
-    paddingBottom: 122,
-    paddingTop: 50,
+    paddingBottom: 158,
+    paddingTop: 28,
   },
   header: {
-    gap: 12,
+    gap: 10,
   },
   topChrome: {
     alignItems: 'center',
@@ -2161,52 +2173,52 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: '#ececf0',
-    borderRadius: 36,
+    borderRadius: 30,
     borderWidth: 1,
     boxShadow: '0 10px 26px rgba(0, 0, 0, 0.08)',
     flex: 1,
     flexDirection: 'row',
     gap: 9,
-    minHeight: 62,
-    paddingHorizontal: 17,
+    minHeight: 52,
+    paddingHorizontal: 15,
   },
   sourceIcon: {
     color: '#2f80ed',
-    fontSize: 22,
+    fontSize: 19,
     fontWeight: '900',
     letterSpacing: 0,
   },
   brandText: {
     color: '#111111',
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     letterSpacing: 0,
   },
   sourceMeta: {
     color: '#8e8e93',
     flexShrink: 1,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0,
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 9,
   },
   circleButton: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: '#ececf0',
-    borderRadius: 28,
+    borderRadius: 26,
     borderWidth: 1,
     boxShadow: '0 10px 26px rgba(0, 0, 0, 0.08)',
-    height: 62,
+    height: 52,
     justifyContent: 'center',
-    width: 62,
+    width: 52,
   },
   circleButtonText: {
     color: '#050505',
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '900',
     letterSpacing: 0,
   },
@@ -2216,13 +2228,13 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#050505',
-    fontSize: 30,
+    fontSize: 27,
     fontWeight: '900',
     letterSpacing: 0,
   },
   subtitle: {
     color: '#8e8e93',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     letterSpacing: 0,
     lineHeight: 20,
@@ -2275,63 +2287,63 @@ const styles = StyleSheet.create({
   idleStatusPanel: {
     alignItems: 'center',
     backgroundColor: '#f7f7f8',
-    borderRadius: 20,
+    borderRadius: 18,
     flexDirection: 'row',
     gap: 12,
-    minHeight: 74,
-    padding: 14,
+    minHeight: 64,
+    padding: 12,
   },
   idleStatusIconWrap: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: 18,
-    height: 44,
+    borderRadius: 16,
+    height: 40,
     justifyContent: 'center',
-    width: 44,
+    width: 40,
   },
   idleStatusIcon: {
     color: '#2f80ed',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0,
   },
   idleStatusTitle: {
     color: '#111111',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '900',
     letterSpacing: 0,
   },
   idleStatusText: {
     color: '#8e8e93',
-    fontSize: 13,
+    fontSize: 12,
     letterSpacing: 0,
     lineHeight: 18,
   },
   tabContent: {
-    gap: 16,
+    gap: 14,
   },
   discoverModeScroller: {
     marginHorizontal: -16,
   },
   discoverModeRow: {
     flexDirection: 'row',
-    gap: 26,
+    gap: 25,
     paddingHorizontal: 16,
   },
   discoverModeButton: {
     justifyContent: 'center',
-    minHeight: 42,
+    minHeight: 38,
   },
   discoverModeButtonActive: {},
   discoverModeText: {
     color: '#8e8e93',
-    fontSize: 22,
+    fontSize: 19,
     fontWeight: '700',
     letterSpacing: 0,
   },
   discoverModeTextActive: {
     color: '#050505',
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '900',
   },
   statsGrid: {
@@ -2368,77 +2380,77 @@ const styles = StyleSheet.create({
   },
   quickAction: {
     backgroundColor: '#f1f1f3',
-    borderRadius: 12,
+    borderRadius: 11,
     borderWidth: 1,
     borderColor: '#f1f1f3',
     gap: 4,
-    minHeight: 50,
-    paddingHorizontal: 13,
-    paddingVertical: 9,
+    minHeight: 46,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     width: '48.5%',
   },
   quickValue: {
     color: '#111111',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '900',
     letterSpacing: 0,
   },
   quickLabel: {
     color: '#8e8e93',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0,
   },
   panel: {
     backgroundColor: '#ffffff',
-    borderRadius: 22,
-    gap: 13,
-    padding: 16,
+    borderRadius: 20,
+    gap: 11,
+    padding: 14,
   },
   settingsGroup: {
     backgroundColor: '#ffffff',
-    borderRadius: 26,
-    gap: 13,
-    padding: 18,
+    borderRadius: 24,
+    gap: 12,
+    padding: 16,
   },
   settingsHero: {
     backgroundColor: '#ffffff',
-    borderRadius: 30,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    borderRadius: 26,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
   },
   settingsHeroTop: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 12,
-    minHeight: 42,
+    minHeight: 36,
   },
   settingsHeroIcon: {
     color: '#2f80ed',
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '900',
     letterSpacing: 0,
   },
   settingsHeroTitle: {
     color: '#111111',
     flex: 1,
-    fontSize: 22,
+    fontSize: 19,
     fontWeight: '800',
     letterSpacing: 0,
   },
   settingsHeroState: {
     color: '#8e8e93',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0,
   },
   settingsSectionLabelWrap: {
-    paddingHorizontal: 22,
-    paddingTop: 6,
+    paddingHorizontal: 20,
+    paddingTop: 4,
   },
   settingsSectionLabel: {
     color: '#8e8e93',
-    fontSize: 22,
+    fontSize: 19,
     fontWeight: '900',
     letterSpacing: 0,
   },
@@ -2446,17 +2458,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 12,
-    minHeight: 76,
+    minHeight: 62,
   },
   sourceAddressName: {
     color: '#2f80ed',
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '800',
     letterSpacing: 0,
   },
   sourceAddressUrl: {
     color: '#8e8e93',
-    fontSize: 14,
+    fontSize: 13,
     letterSpacing: 0,
     lineHeight: 19,
   },
@@ -2465,13 +2477,13 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: '#111111',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0,
   },
   sectionHint: {
     color: '#8e8e93',
-    fontSize: 13,
+    fontSize: 12,
     letterSpacing: 0,
     lineHeight: 18,
   },
@@ -2487,14 +2499,14 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: '#f2f2f7',
     borderColor: '#f2f2f7',
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     color: '#111111',
-    fontSize: 15,
+    fontSize: 14,
     letterSpacing: 0,
-    minHeight: 50,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
+    minHeight: 46,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   multilineInput: {
     minHeight: 128,
@@ -2510,11 +2522,11 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     backgroundColor: '#f2f2f7',
-    borderRadius: 18,
+    borderRadius: 16,
     color: '#111111',
     fontSize: 15,
     letterSpacing: 0,
-    minHeight: 44,
+    minHeight: 42,
     paddingHorizontal: 16,
   },
   filterScroller: {
@@ -2557,10 +2569,10 @@ const styles = StyleSheet.create({
   compactButton: {
     alignItems: 'center',
     backgroundColor: '#eeeeef',
-    borderRadius: 16,
+    borderRadius: 15,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 46,
+    minHeight: 44,
     paddingHorizontal: 13,
   },
   fullWidthButton: {
@@ -2577,7 +2589,7 @@ const styles = StyleSheet.create({
   },
   compactButtonText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '900',
     letterSpacing: 0,
   },
@@ -2724,9 +2736,9 @@ const styles = StyleSheet.create({
   },
   selectedSitePanel: {
     backgroundColor: '#f7f7f8',
-    borderRadius: 16,
+    borderRadius: 15,
     gap: 3,
-    padding: 12,
+    padding: 11,
   },
   siteRailScroller: {
     marginHorizontal: -4,
@@ -2738,10 +2750,10 @@ const styles = StyleSheet.create({
   },
   siteChip: {
     backgroundColor: '#eeeeef',
-    borderRadius: 12,
+    borderRadius: 11,
     justifyContent: 'center',
     maxWidth: 132,
-    minHeight: 38,
+    minHeight: 34,
     paddingHorizontal: 12,
   },
   siteChipActive: {
@@ -2749,7 +2761,7 @@ const styles = StyleSheet.create({
   },
   siteChipText: {
     color: '#111111',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0,
   },
@@ -2821,6 +2833,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0,
     lineHeight: 19,
+  },
+  summaryValueCompact: {
+    color: '#333333',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
   },
   currentUrl: {
     color: '#555555',
@@ -2953,41 +2971,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.84)',
     borderColor: 'rgba(210, 210, 215, 0.72)',
-    borderRadius: 38,
+    borderRadius: 34,
     borderWidth: 1,
-    bottom: 18,
+    bottom: 12,
     boxShadow: '0 12px 30px rgba(0, 0, 0, 0.18)',
     flexDirection: 'row',
     gap: 4,
-    left: 34,
-    padding: 7,
+    left: 44,
+    padding: 6,
     position: 'absolute',
-    right: 34,
+    right: 44,
   },
   bottomTab: {
     alignItems: 'center',
-    borderRadius: 30,
+    borderRadius: 28,
     flex: 1,
     gap: 2,
     justifyContent: 'center',
-    minHeight: 58,
+    minHeight: 50,
   },
   bottomTabActive: {
     backgroundColor: 'rgba(47, 128, 237, 0.16)',
   },
   bottomTabSymbol: {
     color: '#111111',
-    fontSize: 24,
+    fontSize: 21,
     fontWeight: '900',
     letterSpacing: 0,
-    lineHeight: 27,
+    lineHeight: 23,
   },
   bottomTabSymbolActive: {
     color: '#2f80ed',
   },
   bottomTabText: {
     color: '#111111',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
     letterSpacing: 0,
   },
