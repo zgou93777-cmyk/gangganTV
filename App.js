@@ -71,6 +71,7 @@ const {
   CatVodRuntimeController,
 } = require('./src/catvod-runtime');
 const {
+  fetchPluginServerHealth,
   fetchPluginServerDetail,
   fetchPluginServerPlay,
   fetchPluginServerSearch,
@@ -145,6 +146,8 @@ export default function App() {
   const [batchSiteTestResult, setBatchSiteTestResult] = useState(null);
   const [verifyingPlugin, setVerifyingPlugin] = useState(false);
   const [pluginVerifyResult, setPluginVerifyResult] = useState(null);
+  const [checkingPluginServer, setCheckingPluginServer] = useState(false);
+  const [pluginServerHealth, setPluginServerHealth] = useState(null);
   const [catVodExecutorHtml, setCatVodExecutorHtml] = useState('');
   const [catVodSource, setCatVodSource] = useState(null);
   const [catVodReady, setCatVodReady] = useState(false);
@@ -790,6 +793,7 @@ export default function App() {
       ]);
       setPluginServerUrl('');
       setPluginServerToken(cleanToken);
+      setPluginServerHealth(null);
       setMessage('已清空插件解析服务地址');
       return;
     }
@@ -807,7 +811,38 @@ export default function App() {
     ]);
     setPluginServerUrl(cleanUrl);
     setPluginServerToken(cleanToken);
+    setPluginServerHealth(null);
     setMessage('已保存插件解析服务地址');
+  }
+
+  async function checkPluginServer() {
+    setCheckingPluginServer(true);
+    setPluginServerHealth(null);
+    setActiveType('config');
+    setMessage('正在检测插件解析服务');
+
+    try {
+      const health = await fetchPluginServerHealth({
+        baseUrl: pluginServerUrl.trim(),
+        token: pluginServerToken.trim(),
+      });
+      const ok = Boolean(health?.ok);
+
+      setPluginServerHealth({
+        ok,
+        message: ok ? `服务正常：${health.service || 'plugin-parser'}` : '服务返回异常状态',
+      });
+      setMessage(ok ? '插件解析服务连接正常' : '插件解析服务返回异常状态');
+    } catch (healthError) {
+      const errorMessage = healthError?.message || '插件解析服务检测失败';
+      setPluginServerHealth({
+        ok: false,
+        message: errorMessage,
+      });
+      setMessage(errorMessage);
+    } finally {
+      setCheckingPluginServer(false);
+    }
   }
 
   async function fetchCatVodText(url, options = {}) {
@@ -965,6 +1000,10 @@ export default function App() {
   function buildPluginServerConfig(site) {
     if (!pluginServerUrl.trim()) {
       throw new Error('请先在设置里填写插件解析服务地址');
+    }
+
+    if (!pluginServerToken.trim()) {
+      throw new Error('请先在设置里填写插件解析服务 Token');
     }
 
     return {
@@ -1695,6 +1734,27 @@ export default function App() {
           >
             保存插件解析服务
           </CompactButton>
+          <View style={styles.buttonRow}>
+            <CompactButton
+              disabled={checkingPluginServer}
+              onPress={() =>
+                checkPluginServer().catch(() => setMessage('插件解析服务检测失败'))
+              }
+              variant="plain"
+            >
+              {checkingPluginServer ? '检测中' : '检测解析服务'}
+            </CompactButton>
+          </View>
+          {pluginServerHealth ? (
+            <Text
+              style={[
+                styles.helperText,
+                pluginServerHealth.ok ? styles.successText : styles.warningText,
+              ]}
+            >
+              {pluginServerHealth.message}
+            </Text>
+          ) : null}
           <TextInput
             autoCapitalize="none"
             autoCorrect={false}
@@ -3360,6 +3420,12 @@ const styles = StyleSheet.create({
   },
   warningText: {
     color: '#b45309',
+    fontSize: 12,
+    letterSpacing: 0,
+    lineHeight: 17,
+  },
+  successText: {
+    color: '#168a56',
     fontSize: 12,
     letterSpacing: 0,
     lineHeight: 17,

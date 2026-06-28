@@ -4,6 +4,16 @@ const {
   normalizeCatVodSearchResult,
 } = require('./catvod-adapter');
 
+async function fetchPluginServerHealth(config, fetchImpl = fetch) {
+  const url = buildPluginServerUrl(config?.baseUrl, '/health');
+  const response = await fetchImpl(url, {
+    headers: buildPluginServerHeaders(config?.token),
+    method: 'GET',
+  });
+
+  return readPluginServerResponse(response);
+}
+
 async function fetchPluginServerSearch(config, keyword, fetchImpl = fetch) {
   const payload = await postPluginServer(config, '/catvod/search', {
     keyword,
@@ -41,14 +51,52 @@ async function postPluginServer(config, path, body, fetchImpl) {
   });
 
   if (!response.ok) {
-    throw new Error(`插件解析服务请求失败：HTTP ${response.status}`);
+    const payload = await parsePluginServerJson(response);
+    throw new Error(formatPluginServerError(response.status, payload));
   }
 
+  return parsePluginServerJson(response);
+}
+
+async function readPluginServerResponse(response) {
+  const payload = await parsePluginServerJson(response);
+
+  if (!response.ok) {
+    throw new Error(formatPluginServerError(response.status, payload));
+  }
+
+  return payload;
+}
+
+async function parsePluginServerJson(response) {
   try {
     return JSON.parse(await response.text());
   } catch {
     throw new Error('插件解析服务没有返回有效 JSON');
   }
+}
+
+function formatPluginServerError(status, payload) {
+  const code = payload?.error || '';
+  const message = payload?.message || '';
+
+  if (status === 401 || code === 'unauthorized') {
+    return '插件解析服务 Token 不正确或未填写，请检查设置里的 Token';
+  }
+
+  if (status === 422 || code === 'PLUGIN_SITE_INCOMPATIBLE') {
+    return `该站点暂不兼容服务端解析${message ? `：${message}` : ''}`;
+  }
+
+  if (status === 504 || code === 'PLUGIN_TIMEOUT') {
+    return '插件解析服务超时，请稍后重试或换一个站点';
+  }
+
+  if (status >= 500) {
+    return `插件解析服务内部错误${message ? `：${message}` : `：HTTP ${status}`}`;
+  }
+
+  return `插件解析服务请求失败：HTTP ${status}${message ? ` ${message}` : ''}`;
 }
 
 function buildPluginServerUrl(baseUrl, path) {
@@ -76,6 +124,7 @@ function buildPluginServerHeaders(token) {
 }
 
 module.exports = {
+  fetchPluginServerHealth,
   fetchPluginServerDetail,
   fetchPluginServerPlay,
   fetchPluginServerSearch,

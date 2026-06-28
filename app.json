@@ -13,7 +13,8 @@
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
-        }
+        },
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -30,6 +31,11 @@
     "plugins": [
       "expo-dev-client",
       "expo-video"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "34de1700-a9d7-4662-b1fb-dcf4ed494cde"
+      }
+    }
   }
 }

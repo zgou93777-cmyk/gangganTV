@@ -2,10 +2,33 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const {
+  fetchPluginServerHealth,
   fetchPluginServerDetail,
   fetchPluginServerPlay,
   fetchPluginServerSearch,
 } = require('../src/plugin-server-client');
+
+test('fetchPluginServerHealth loads parser service health', async () => {
+  const result = await fetchPluginServerHealth(
+    {
+      baseUrl: 'https://parser.example.com/',
+      token: 'secret-token',
+    },
+    async (url, options) => {
+      assert.equal(url, 'https://parser.example.com/health');
+      assert.equal(options.headers.Authorization, 'Bearer secret-token');
+      return jsonResponse({
+        ok: true,
+        service: 'ganggan-plugin-parser',
+      });
+    }
+  );
+
+  assert.deepEqual(result, {
+    ok: true,
+    service: 'ganggan-plugin-parser',
+  });
+});
 
 test('fetchPluginServerSearch posts script and keyword then normalizes results', async () => {
   const calls = [];
@@ -79,6 +102,68 @@ test('fetchPluginServerDetail and play normalize server results', async () => {
   );
 
   assert.equal(playable, 'https://media.example.com/final.m3u8');
+});
+
+test('plugin server errors use clear Chinese messages', async () => {
+  await assert.rejects(
+    () =>
+      fetchPluginServerSearch(
+        {
+          baseUrl: 'https://parser.example.com',
+          scriptUrl: 'https://cat.example.com/index.js',
+        },
+        '仙逆',
+        async () =>
+          jsonResponse(
+            {
+              error: 'unauthorized',
+              message: 'Plugin parser token is missing or invalid.',
+            },
+            401
+          )
+      ),
+    /Token/
+  );
+
+  await assert.rejects(
+    () =>
+      fetchPluginServerSearch(
+        {
+          baseUrl: 'https://parser.example.com',
+          scriptUrl: 'https://cat.example.com/index.js',
+        },
+        '仙逆',
+        async () =>
+          jsonResponse(
+            {
+              error: 'PLUGIN_SITE_INCOMPATIBLE',
+              message: "Cannot read properties of undefined (reading 'cookie')",
+            },
+            422
+          )
+      ),
+    /站点暂不兼容/
+  );
+
+  await assert.rejects(
+    () =>
+      fetchPluginServerSearch(
+        {
+          baseUrl: 'https://parser.example.com',
+          scriptUrl: 'https://cat.example.com/index.js',
+        },
+        '仙逆',
+        async () =>
+          jsonResponse(
+            {
+              error: 'PLUGIN_TIMEOUT',
+              message: 'Plugin execution timed out.',
+            },
+            504
+          )
+      ),
+    /超时/
+  );
 });
 
 function jsonResponse(body, status = 200) {
