@@ -93,6 +93,7 @@ const {
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const BUILT_IN_TEST_LIVE_PLAYLIST_URL = 'mock://demo-live-m3u';
+const LOCAL_PARSER_HINT_URL = 'http://192.168.220.41:3000';
 const TOP_SAFE_PADDING = Platform.select({
   ios: 54,
   android: (NativeStatusBar.currentHeight || 0) + 18,
@@ -883,12 +884,20 @@ export default function App() {
         token: pluginServerToken.trim(),
       });
       const ok = Boolean(health?.ok);
+      const capabilities = health?.capabilities || {};
+      const capabilityText = [
+        capabilities.catvod ? 'CatVod 可用' : 'CatVod 未确认',
+        capabilities.tvboxRoutes ? 'TVBox 路由可用' : 'TVBox 路由缺失',
+        capabilities.tvboxRuntime ? 'TVBox Spider 已连接' : 'TVBox Spider 未连接',
+      ].join('，');
 
       setPluginServerHealth({
         ok,
-        message: ok ? `服务正常：${health.service || 'plugin-parser'}` : '服务返回异常状态',
+        message: ok
+          ? `本地解析服务正常：${capabilityText}`
+          : '服务返回异常状态',
       });
-      setMessage(ok ? '插件解析服务连接正常' : '插件解析服务返回异常状态');
+      setMessage(ok ? '本地解析服务连接正常' : '本地解析服务返回异常状态');
     } catch (healthError) {
       const errorMessage = healthError?.message || '插件解析服务检测失败';
       setPluginServerHealth({
@@ -2084,14 +2093,14 @@ export default function App() {
             </CompactButton>
           </View>
           <Text style={styles.helperText}>
-            测试源只包含公开样片。插件源会先做沙盒预检；简单 JS 可本地隔离执行，Node/CSP 插件需要插件解析服务。
+            测试源只包含公开样片。现在优先使用你电脑上的本地解析器；OK影视/TVBox 的 csp Spider 源需要本地 TVBox runtime。
           </Text>
           <TextInput
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
             onChangeText={setPluginServerUrl}
-            placeholder="插件解析服务，例如 https://parser.example.com"
+            placeholder={`本地解析器，例如 ${LOCAL_PARSER_HINT_URL}`}
             placeholderTextColor="#8d96a0"
             style={styles.input}
             value={pluginServerUrl}
@@ -2106,6 +2115,17 @@ export default function App() {
             style={styles.input}
             value={pluginServerToken}
           />
+          <CompactButton
+            onPress={() => {
+              setPluginServerUrl(LOCAL_PARSER_HINT_URL);
+              setPluginServerToken('');
+              setPluginServerHealth(null);
+              setMessage(`已填入本地解析器地址：${LOCAL_PARSER_HINT_URL}`);
+            }}
+            variant="plain"
+          >
+            使用本机解析器地址
+          </CompactButton>
           <CompactButton
             onPress={() =>
               savePluginServerUrl().catch(() => setMessage('插件解析服务保存失败'))
