@@ -103,6 +103,14 @@ const {
   buildEpisodeLoadingMessage,
   buildSearchLoadingMessage,
 } = require('./src/vod-ux');
+const {
+  COLORS,
+  GLASS_ACTIVE_OUTLINE_STYLE,
+  GLASS_BUTTON_STYLE,
+  GLASS_INPUT_STYLE,
+  GLASS_NAV_STYLE,
+  GLASS_PANEL_STYLE,
+} = require('./src/ui-theme');
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const RECOMMENDED_CATVOD_SOURCE_URL =
@@ -1743,34 +1751,42 @@ export default function App() {
   function renderWatching() {
     return (
       <View style={styles.tabContent}>
-        <View style={styles.panel}>
-          <View style={styles.panelHeader}>
-            <Text style={styles.sectionTitle}>最近状态</Text>
-            <Text style={styles.sectionHint}>本机保存的播放和导入记录</Text>
+        <View style={styles.historyTop}>
+          <View style={styles.historyPill}>
+            <Text style={styles.historyPillIcon}>◴</Text>
+            <Text style={styles.historyPillText}>播放历史</Text>
           </View>
-          <View style={styles.summaryList}>
-            <SummaryRow
-              label="当前播放"
-              value={
-                watchingSummary.hasCurrentUrl
-                  ? '有地址'
-                  : playHistory.length
-                    ? '可继续最近播放'
-                    : '未播放'
-              }
-            />
-            <SummaryRow
-              label="点播直链"
-              value={vodUrl || '未保存'}
-              selectable
-              compact
-            />
-            <SummaryRow
-              label="当前站点"
-              value={selectedSite ? selectedSite.name : '未选择'}
-            />
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setMessage('多选删除稍后接入')}
+            style={({ pressed }) => [
+              styles.historyPill,
+              styles.historyPillAction,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <Text style={styles.historyPillText}>多选</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.watchingQuickRow}>
+          <View style={styles.watchingStatPill}>
+            <Text style={styles.watchingStatValue}>{playHistory.length}</Text>
+            <Text style={styles.watchingStatLabel}>历史</Text>
           </View>
-          <View style={styles.buttonRow}>
+          <View style={styles.watchingStatPill}>
+            <Text style={styles.watchingStatValue}>{watchingSummary.siteCount}</Text>
+            <Text style={styles.watchingStatLabel}>站点</Text>
+          </View>
+          <View style={styles.watchingStatPill}>
+            <Text style={styles.watchingStatValue}>
+              {watchingSummary.hasCurrentUrl ? '1' : '0'}
+            </Text>
+            <Text style={styles.watchingStatLabel}>当前</Text>
+          </View>
+        </View>
+
+        <View style={styles.historyActionRow}>
             <CompactButton
               onPress={() =>
                 continueLatestPlay().catch(() => setMessage('继续播放失败'))
@@ -1785,14 +1801,9 @@ export default function App() {
             >
               播放直链
             </CompactButton>
-          </View>
         </View>
 
-        <View style={styles.panel}>
-          <View style={styles.panelHeader}>
-            <Text style={styles.sectionTitle}>播放历史</Text>
-            <Text style={styles.sectionHint}>最近播放会自动保存在本机</Text>
-          </View>
+        <View style={styles.historyListSection}>
           {playHistory.length ? (
             <View style={styles.listStack}>
               {playHistory.slice(0, 12).map((item) => (
@@ -1803,24 +1814,37 @@ export default function App() {
                     playHistoryItem(item).catch(() => setMessage('历史播放失败'))
                   }
                   style={({ pressed }) => [
-                    styles.listRow,
+                    styles.historyMediaRow,
                     pressed && styles.buttonPressed,
                   ]}
                 >
-                  <View style={styles.rowMain}>
-                    <Text style={styles.rowTitle}>{item.title}</Text>
-                    <Text numberOfLines={1} selectable style={styles.rowMeta}>
-                      {formatHistoryType(item.type)} · {item.sourceName || '本机历史'}
+                  <View style={styles.historyPosterBox}>
+                    <Text style={styles.historyPosterInitial}>
+                      {(item.title || '播').slice(0, 1)}
                     </Text>
                   </View>
-                  <Text style={styles.rowAction}>继续</Text>
+                  <View style={styles.rowMain}>
+                    <Text numberOfLines={2} style={styles.historyMediaTitle}>
+                      {item.title}
+                    </Text>
+                    <Text numberOfLines={2} selectable style={styles.historyMediaMeta}>
+                      {formatHistoryType(item.type)} · {item.sourceName || '本机历史'}
+                    </Text>
+                    <Text numberOfLines={1} selectable style={styles.historyMediaMeta}>
+                      {item.url}
+                    </Text>
+                  </View>
+                  <View style={styles.historySelectCircle} />
                 </Pressable>
               ))}
             </View>
           ) : (
-            <Text style={styles.emptyText}>
-              还没有播放历史。播放一次点播剧集或点播直链后，这里会出现继续播放入口。
-            </Text>
+            <View style={styles.historyEmptyPanel}>
+              <Text style={styles.sectionTitle}>还没有播放历史</Text>
+              <Text style={styles.sectionHint}>
+                播放一次点播剧集或点播直链后，这里会出现继续播放入口。
+              </Text>
+            </View>
           )}
         </View>
 
@@ -3576,14 +3600,14 @@ function formatCapabilityStatus(value) {
 
 const styles = StyleSheet.create({
   root: {
-    backgroundColor: '#ffffff',
+    backgroundColor: COLORS.white,
     flex: 1,
   },
   settingsRoot: {
-    backgroundColor: '#f2f2f7',
+    backgroundColor: COLORS.page,
   },
   searchPageRoot: {
-    backgroundColor: '#ffffff',
+    backgroundColor: COLORS.white,
   },
   detailPageRoot: {
     backgroundColor: '#160f0f',
@@ -3604,9 +3628,9 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   scrollContent: {
-    gap: 14,
-    padding: 16,
-    paddingBottom: 210,
+    gap: 10,
+    padding: 14,
+    paddingBottom: 118,
     paddingTop: TOP_SAFE_PADDING,
   },
   header: {
@@ -3616,7 +3640,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: 10,
     zIndex: 40,
   },
   sourceSelectorWrap: {
@@ -3625,48 +3649,42 @@ const styles = StyleSheet.create({
     zIndex: 50,
   },
   sourcePill: {
+    ...GLASS_BUTTON_STYLE,
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#ececf0',
-    borderRadius: 30,
-    borderWidth: 1,
-    boxShadow: '0 10px 26px rgba(0, 0, 0, 0.08)',
+    borderRadius: 21,
     flexDirection: 'row',
-    gap: 9,
-    minHeight: 52,
-    paddingHorizontal: 15,
+    gap: 6,
+    minHeight: 40,
+    paddingHorizontal: 12,
   },
   sourceIcon: {
-    color: '#2f80ed',
-    fontSize: 19,
+    color: COLORS.blue,
+    fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0,
   },
   brandText: {
-    color: '#111111',
-    fontSize: 20,
+    color: COLORS.ink,
+    fontSize: 15,
     fontWeight: '800',
     letterSpacing: 0,
   },
   sourceMeta: {
-    color: '#8e8e93',
+    color: COLORS.muted,
     flexShrink: 1,
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0,
   },
   sourceMenu: {
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    borderColor: 'rgba(209, 213, 219, 0.84)',
-    borderRadius: 24,
-    borderWidth: 1,
-    boxShadow: '0 18px 48px rgba(15, 23, 42, 0.18)',
+    ...GLASS_PANEL_STYLE,
+    borderRadius: 26,
     left: 0,
     maxHeight: 520,
     overflow: 'hidden',
     position: 'absolute',
-    top: 60,
-    width: 318,
+    top: 48,
+    width: 245,
     zIndex: 60,
   },
   sourceMenuScroll: {
@@ -3675,45 +3693,42 @@ const styles = StyleSheet.create({
   sourceMenuItem: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 12,
-    minHeight: 58,
-    paddingHorizontal: 18,
+    gap: 7,
+    minHeight: 39,
+    paddingHorizontal: 14,
   },
   sourceMenuItemActive: {
-    backgroundColor: 'rgba(47, 128, 237, 0.12)',
+    ...GLASS_ACTIVE_OUTLINE_STYLE,
   },
   sourceMenuCheck: {
-    color: '#111827',
-    fontSize: 22,
+    color: COLORS.ink,
+    fontSize: 16,
     fontWeight: '900',
     letterSpacing: 0,
-    width: 22,
+    width: 16,
   },
   sourceMenuText: {
-    color: '#111827',
+    color: COLORS.ink,
     flex: 1,
-    fontSize: 21,
+    fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0,
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 9,
+    gap: 8,
   },
   circleButton: {
+    ...GLASS_BUTTON_STYLE,
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#ececf0',
-    borderRadius: 26,
-    borderWidth: 1,
-    boxShadow: '0 10px 26px rgba(0, 0, 0, 0.08)',
-    height: 52,
+    borderRadius: 21,
+    height: 40,
     justifyContent: 'center',
-    width: 52,
+    width: 40,
   },
   circleButtonText: {
-    color: '#050505',
-    fontSize: 22,
+    color: COLORS.ink,
+    fontSize: 21,
     fontWeight: '900',
     letterSpacing: 0,
   },
@@ -3745,11 +3760,9 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   statusPanel: {
+    ...GLASS_PANEL_STYLE,
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#efeff4',
     borderRadius: 18,
-    borderWidth: 1,
     flexDirection: 'row',
     gap: 12,
     padding: 12,
@@ -3780,8 +3793,8 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   idleStatusPanel: {
+    ...GLASS_PANEL_STYLE,
     alignItems: 'center',
-    backgroundColor: '#f7f7f8',
     borderRadius: 18,
     flexDirection: 'row',
     gap: 12,
@@ -3789,8 +3802,8 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   idleStatusIconWrap: {
+    ...GLASS_BUTTON_STYLE,
     alignItems: 'center',
-    backgroundColor: '#ffffff',
     borderRadius: 16,
     height: 40,
     justifyContent: 'center',
@@ -3818,40 +3831,40 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   discoverModeScroller: {
-    marginHorizontal: -16,
+    marginHorizontal: -14,
   },
   discoverModeRow: {
     flexDirection: 'row',
-    gap: 25,
-    paddingHorizontal: 16,
+    gap: 20,
+    paddingHorizontal: 14,
   },
   discoverModeButton: {
     justifyContent: 'center',
-    minHeight: 38,
+    minHeight: 32,
   },
   discoverModeButtonActive: {},
   discoverModeText: {
-    color: '#8e8e93',
-    fontSize: 19,
+    color: COLORS.muted,
+    fontSize: 17,
     fontWeight: '700',
     letterSpacing: 0,
   },
   discoverModeTextActive: {
-    color: '#050505',
-    fontSize: 26,
+    color: COLORS.ink,
+    fontSize: 22,
     fontWeight: '900',
   },
   discoverFeed: {
-    gap: 20,
+    gap: 10,
   },
   discoverFilterStack: {
-    gap: 12,
+    gap: 7,
   },
   discoverFilterRow: {
     alignItems: 'center',
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 7,
   },
   filterLabelPill: {
     alignItems: 'center',
@@ -3859,39 +3872,39 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   filterLabelText: {
-    color: '#111111',
-    fontSize: 18,
+    color: COLORS.ink,
+    fontSize: 14,
     fontWeight: '700',
     letterSpacing: 0,
   },
   homeFilterChip: {
+    ...GLASS_BUTTON_STYLE,
     alignItems: 'center',
-    backgroundColor: '#eeeeef',
-    borderRadius: 10,
+    borderRadius: 8,
     justifyContent: 'center',
-    minHeight: 36,
-    paddingHorizontal: 14,
+    minHeight: 24,
+    paddingHorizontal: 8,
   },
   homeFilterChipActive: {
-    backgroundColor: '#dfeeff',
+    borderColor: 'rgba(47, 125, 246, 0.48)',
   },
   homeFilterChipText: {
-    color: '#111111',
-    fontSize: 18,
-    fontWeight: '700',
+    color: COLORS.ink,
+    fontSize: 13,
+    fontWeight: '800',
     letterSpacing: 0,
   },
   homeFilterChipTextActive: {
-    color: '#1769d7',
+    color: COLORS.blue,
   },
   discoverPosterGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 18,
+    gap: 10,
   },
   discoverPosterCard: {
-    gap: 8,
-    width: '29.9%',
+    gap: 5,
+    width: '31.4%',
   },
   discoverPosterFrame: {
     aspectRatio: 0.72,
@@ -3918,11 +3931,11 @@ const styles = StyleSheet.create({
     top: 0,
   },
   discoverPosterTitle: {
-    color: '#111111',
-    fontSize: 17,
+    color: COLORS.ink,
+    fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0,
-    lineHeight: 22,
+    lineHeight: 16,
     textAlign: 'center',
   },
   statsGrid: {
@@ -3930,10 +3943,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   statTile: {
-    backgroundColor: '#ffffff',
-    borderColor: '#efeff4',
+    ...GLASS_BUTTON_STYLE,
     borderRadius: 18,
-    borderWidth: 1,
     flex: 1,
     gap: 2,
     minHeight: 66,
@@ -3958,10 +3969,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   quickAction: {
-    backgroundColor: '#f1f1f3',
+    ...GLASS_BUTTON_STYLE,
     borderRadius: 11,
-    borderWidth: 1,
-    borderColor: '#f1f1f3',
     gap: 4,
     minHeight: 46,
     paddingHorizontal: 12,
@@ -3981,22 +3990,22 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   panel: {
-    backgroundColor: '#ffffff',
+    ...GLASS_PANEL_STYLE,
     borderRadius: 20,
     gap: 11,
     padding: 14,
   },
   settingsGroup: {
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
+    ...GLASS_PANEL_STYLE,
+    borderRadius: 17,
     gap: 12,
-    padding: 16,
+    padding: 14,
   },
   settingsHero: {
-    backgroundColor: '#ffffff',
-    borderRadius: 26,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
+    ...GLASS_BUTTON_STYLE,
+    borderRadius: 23,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   settingsHeroTop: {
     alignItems: 'center',
@@ -4005,21 +4014,21 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   settingsHeroIcon: {
-    color: '#2f80ed',
-    fontSize: 20,
+    color: COLORS.blue,
+    fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0,
   },
   settingsHeroTitle: {
-    color: '#111111',
+    color: COLORS.ink,
     flex: 1,
-    fontSize: 19,
+    fontSize: 16,
     fontWeight: '800',
     letterSpacing: 0,
   },
   settingsHeroState: {
-    color: '#8e8e93',
-    fontSize: 16,
+    color: COLORS.muted,
+    fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0,
   },
@@ -4028,8 +4037,8 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   settingsSectionLabel: {
-    color: '#8e8e93',
-    fontSize: 19,
+    color: COLORS.muted,
+    fontSize: 15,
     fontWeight: '900',
     letterSpacing: 0,
   },
@@ -4040,14 +4049,14 @@ const styles = StyleSheet.create({
     minHeight: 62,
   },
   sourceAddressName: {
-    color: '#2f80ed',
-    fontSize: 18,
+    color: COLORS.blue,
+    fontSize: 16,
     fontWeight: '800',
     letterSpacing: 0,
   },
   sourceAddressUrl: {
-    color: '#8e8e93',
-    fontSize: 13,
+    color: COLORS.muted,
+    fontSize: 12,
     letterSpacing: 0,
     lineHeight: 19,
   },
@@ -4076,11 +4085,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   input: {
-    backgroundColor: '#f2f2f7',
-    borderColor: '#f2f2f7',
+    ...GLASS_INPUT_STYLE,
     borderRadius: 14,
-    borderWidth: 1,
-    color: '#111111',
+    color: COLORS.ink,
     fontSize: 14,
     letterSpacing: 0,
     minHeight: 46,
@@ -4100,9 +4107,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   searchInput: {
-    backgroundColor: '#f2f2f7',
+    ...GLASS_INPUT_STYLE,
     borderRadius: 16,
-    color: '#111111',
+    color: COLORS.ink,
     fontSize: 15,
     letterSpacing: 0,
     minHeight: 42,
@@ -4117,14 +4124,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   filterChip: {
-    backgroundColor: '#eeeeef',
+    ...GLASS_BUTTON_STYLE,
     borderRadius: 10,
     justifyContent: 'center',
     minHeight: 36,
     paddingHorizontal: 13,
   },
   filterChipActive: {
-    backgroundColor: '#2f80ed',
+    borderColor: 'rgba(47, 125, 246, 0.52)',
   },
   filterChipText: {
     color: '#111111',
@@ -4133,7 +4140,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   filterChipTextActive: {
-    color: '#ffffff',
+    color: COLORS.blue,
   },
   emptyText: {
     color: '#8e8e93',
@@ -4142,8 +4149,8 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   loadingStatePanel: {
+    ...GLASS_PANEL_STYLE,
     alignItems: 'center',
-    backgroundColor: '#f7f7f8',
     borderRadius: 20,
     gap: 10,
     justifyContent: 'center',
@@ -4169,8 +4176,8 @@ const styles = StyleSheet.create({
     gap: 9,
   },
   compactButton: {
+    ...GLASS_BUTTON_STYLE,
     alignItems: 'center',
-    backgroundColor: '#eeeeef',
     borderRadius: 15,
     flex: 1,
     justifyContent: 'center',
@@ -4182,21 +4189,24 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: '#34c759',
+    borderColor: 'rgba(52, 199, 89, 0.48)',
   },
   secondaryButton: {
     backgroundColor: '#ff9500',
+    borderColor: 'rgba(255, 149, 0, 0.48)',
   },
   accentButton: {
-    backgroundColor: '#2f80ed',
+    backgroundColor: 'rgba(47, 125, 246, 0.22)',
+    borderColor: 'rgba(47, 125, 246, 0.52)',
   },
   compactButtonText: {
-    color: '#ffffff',
+    color: COLORS.blue,
     fontSize: 13,
     fontWeight: '900',
     letterSpacing: 0,
   },
   plainButtonText: {
-    color: '#111111',
+    color: COLORS.ink,
   },
   buttonPressed: {
     opacity: 0.72,
@@ -4214,57 +4224,53 @@ const styles = StyleSheet.create({
   },
   searchPage: {
     flex: 1,
-    paddingHorizontal: 10,
+    paddingHorizontal: 14,
     paddingTop: TOP_SAFE_PADDING,
   },
   searchPageTopBar: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 12,
-    minHeight: 70,
-    paddingBottom: 14,
+    gap: 10,
+    minHeight: 52,
+    paddingBottom: 12,
   },
   searchBackButton: {
+    ...GLASS_BUTTON_STYLE,
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#e5e7eb',
-    borderRadius: 28,
-    borderWidth: 1,
-    height: 56,
+    borderRadius: 21,
+    height: 40,
     justifyContent: 'center',
-    width: 56,
+    width: 40,
   },
   searchBackText: {
-    color: '#050505',
-    fontSize: 44,
+    color: COLORS.ink,
+    fontSize: 32,
     fontWeight: '300',
-    lineHeight: 48,
+    lineHeight: 34,
   },
   searchPageInput: {
-    backgroundColor: '#ffffff',
-    borderColor: '#e5e7eb',
-    borderRadius: 26,
+    backgroundColor: 'rgba(255, 255, 255, 0.84)',
+    borderColor: 'rgba(229, 231, 235, 0.82)',
+    borderRadius: 21,
     borderWidth: 1,
-    color: '#111111',
+    color: COLORS.ink,
     flex: 1,
-    fontSize: 19,
+    fontSize: 15,
     letterSpacing: 0,
-    minHeight: 56,
-    paddingHorizontal: 22,
+    minHeight: 40,
+    paddingHorizontal: 13,
   },
   searchSourceButton: {
+    ...GLASS_BUTTON_STYLE,
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#e5e7eb',
-    borderRadius: 28,
-    borderWidth: 1,
-    height: 56,
+    borderRadius: 21,
+    height: 40,
     justifyContent: 'center',
-    width: 56,
+    width: 40,
   },
   searchSourceButtonText: {
-    color: '#111111',
-    fontSize: 25,
+    color: COLORS.ink,
+    fontSize: 21,
     fontWeight: '900',
     letterSpacing: 0,
   },
@@ -4272,17 +4278,20 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flex: 1,
     flexDirection: 'row',
-    gap: 14,
+    gap: 9,
   },
   searchPageRail: {
-    width: 112,
+    width: 118,
   },
   searchPageResults: {
     flexGrow: 1,
     paddingBottom: 40,
   },
   searchEmptyState: {
+    ...GLASS_PANEL_STYLE,
+    borderRadius: 18,
     gap: 6,
+    padding: 16,
     paddingTop: 36,
   },
   searchRail: {
@@ -4295,17 +4304,17 @@ const styles = StyleSheet.create({
   },
   searchRailItem: {
     alignItems: 'center',
-    backgroundColor: '#f6f7f9',
-    borderRadius: 8,
+    backgroundColor: 'transparent',
+    borderRadius: 6,
     flexDirection: 'row',
     gap: 6,
     justifyContent: 'space-between',
-    minHeight: 42,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    minHeight: 24,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
   },
   searchRailItemActive: {
-    backgroundColor: '#2f80ed',
+    backgroundColor: COLORS.blue,
   },
   searchRailItemFailed: {
     opacity: 0.58,
@@ -4313,7 +4322,7 @@ const styles = StyleSheet.create({
   searchRailLabel: {
     color: '#111827',
     flex: 1,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0,
   },
@@ -4333,22 +4342,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   searchRailCountActive: {
-    backgroundColor: '#ffffff',
-    color: '#2f80ed',
+    backgroundColor: 'rgba(255, 255, 255, 0.48)',
+    color: COLORS.blue,
   },
   searchResultPane: {
     flex: 1,
     minWidth: 0,
   },
   sourceFilterSheet: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    backgroundColor: COLORS.page,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
     bottom: 0,
     boxShadow: '0 -18px 54px rgba(0, 0, 0, 0.18)',
     gap: 14,
     left: 0,
-    maxHeight: '72%',
+    maxHeight: '90%',
+    minHeight: '72%',
     padding: 20,
     position: 'absolute',
     right: 0,
@@ -4358,8 +4368,8 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   sourceFilterItem: {
+    ...GLASS_BUTTON_STYLE,
     alignItems: 'center',
-    backgroundColor: '#f4f4f5',
     borderRadius: 16,
     flexDirection: 'row',
     gap: 10,
@@ -4367,7 +4377,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   sourceFilterItemActive: {
-    backgroundColor: '#e7f1ff',
+    borderColor: 'rgba(47, 125, 246, 0.52)',
   },
   sourceFilterCheck: {
     color: '#2f80ed',
@@ -4420,21 +4430,21 @@ const styles = StyleSheet.create({
     top: 0,
   },
   detailBackButton: {
+    ...GLASS_BUTTON_STYLE,
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.78)',
-    borderRadius: 31,
-    height: 62,
+    borderRadius: 21,
+    height: 40,
     justifyContent: 'center',
-    left: 18,
+    left: 14,
     position: 'absolute',
     top: TOP_SAFE_PADDING,
-    width: 62,
+    width: 40,
   },
   detailBackText: {
-    color: '#050505',
-    fontSize: 50,
+    color: COLORS.ink,
+    fontSize: 32,
     fontWeight: '300',
-    lineHeight: 54,
+    lineHeight: 34,
   },
   detailBody: {
     gap: 22,
@@ -4443,10 +4453,10 @@ const styles = StyleSheet.create({
   },
   detailTitle: {
     color: '#ffffff',
-    fontSize: 58,
+    fontSize: 44,
     fontWeight: '900',
     letterSpacing: 0,
-    lineHeight: 64,
+    lineHeight: 50,
     textAlign: 'center',
   },
   detailMeta: {
@@ -4459,7 +4469,7 @@ const styles = StyleSheet.create({
   detailPlayButton: {
     alignItems: 'center',
     alignSelf: 'center',
-    backgroundColor: '#f7f7f8',
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
     borderRadius: 16,
     flexDirection: 'row',
     gap: 14,
@@ -4494,7 +4504,7 @@ const styles = StyleSheet.create({
   },
   detailActionIcon: {
     color: '#ffffff',
-    fontSize: 42,
+    fontSize: 34,
     fontWeight: '500',
     letterSpacing: 0,
   },
@@ -4539,11 +4549,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   detailEpisodeButton: {
+    ...GLASS_BUTTON_STYLE,
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.13)',
-    borderColor: 'rgba(255, 255, 255, 0.72)',
     borderRadius: 18,
-    borderWidth: 1,
     justifyContent: 'center',
     minHeight: 74,
     paddingHorizontal: 16,
@@ -4566,7 +4574,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   detailEmptyEpisodes: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    ...GLASS_BUTTON_STYLE,
     borderRadius: 18,
     gap: 6,
     padding: 16,
@@ -4601,8 +4609,8 @@ const styles = StyleSheet.create({
     minHeight: 62,
   },
   playerCloseButton: {
+    ...GLASS_BUTTON_STYLE,
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
     borderRadius: 25,
     height: 50,
     justifyContent: 'center',
@@ -4631,8 +4639,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   playerLandscapeFrame: {
+    ...GLASS_PANEL_STYLE,
     alignItems: 'center',
     backgroundColor: '#000000',
+    borderColor: 'rgba(255, 255, 255, 0.18)',
     borderRadius: 12,
     justifyContent: 'center',
     marginTop: 24,
@@ -4663,11 +4673,127 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   listStack: {
+    gap: 18,
+  },
+  historyTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 14,
+    marginBottom: 8,
+  },
+  historyPill: {
+    ...GLASS_BUTTON_STYLE,
+    alignItems: 'center',
+    borderRadius: 21,
+    flexDirection: 'row',
+    gap: 6,
+    minHeight: 40,
+    paddingHorizontal: 14,
+  },
+  historyPillAction: {
+    justifyContent: 'center',
+  },
+  historyPillIcon: {
+    color: COLORS.ink,
+    fontSize: 17,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  historyPillText: {
+    color: COLORS.ink,
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  watchingQuickRow: {
+    flexDirection: 'row',
     gap: 8,
   },
-  listRow: {
+  watchingStatPill: {
+    ...GLASS_BUTTON_STYLE,
+    borderRadius: 16,
+    flex: 1,
+    gap: 2,
+    minHeight: 52,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  watchingStatValue: {
+    color: COLORS.blue,
+    fontSize: 18,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  watchingStatLabel: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  historyActionRow: {
+    flexDirection: 'row',
+    gap: 9,
+  },
+  historyListSection: {
+    gap: 12,
+  },
+  historyMediaRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 136,
+    position: 'relative',
+  },
+  historyPosterBox: {
     alignItems: 'center',
-    backgroundColor: '#f7f7f8',
+    backgroundColor: '#dfe3ea',
+    borderRadius: 6,
+    height: 134,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    width: 91,
+  },
+  historyPosterInitial: {
+    color: '#7b8492',
+    fontSize: 34,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  historyMediaTitle: {
+    color: COLORS.ink,
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0,
+    lineHeight: 21,
+    marginTop: 4,
+  },
+  historyMediaMeta: {
+    color: COLORS.muted,
+    fontSize: 13,
+    letterSpacing: 0,
+    lineHeight: 19,
+  },
+  historySelectCircle: {
+    borderColor: COLORS.muted,
+    borderRadius: 11,
+    borderWidth: 2,
+    height: 22,
+    position: 'absolute',
+    right: 1,
+    top: 58,
+    width: 22,
+  },
+  historyEmptyPanel: {
+    ...GLASS_BUTTON_STYLE,
+    borderRadius: 18,
+    gap: 6,
+    padding: 16,
+  },
+  listRow: {
+    ...GLASS_BUTTON_STYLE,
+    alignItems: 'center',
     borderRadius: 16,
     flexDirection: 'row',
     gap: 10,
@@ -4675,11 +4801,11 @@ const styles = StyleSheet.create({
     padding: 13,
   },
   listRowActive: {
-    backgroundColor: '#eaf3ff',
+    borderColor: 'rgba(47, 125, 246, 0.52)',
   },
   resultRow: {
+    ...GLASS_BUTTON_STYLE,
     alignItems: 'center',
-    backgroundColor: '#f7f7f8',
     borderRadius: 16,
     flexDirection: 'row',
     gap: 10,
@@ -4687,7 +4813,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   resultRowActive: {
-    backgroundColor: '#eaf3ff',
+    borderColor: 'rgba(47, 125, 246, 0.52)',
   },
   vodGrid: {
     flexDirection: 'row',
@@ -4811,7 +4937,7 @@ const styles = StyleSheet.create({
     color: '#c16b18',
   },
   selectedSitePanel: {
-    backgroundColor: '#f7f7f8',
+    ...GLASS_PANEL_STYLE,
     borderRadius: 15,
     gap: 3,
     padding: 11,
@@ -4825,7 +4951,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   siteChip: {
-    backgroundColor: '#eeeeef',
+    ...GLASS_BUTTON_STYLE,
     borderRadius: 11,
     justifyContent: 'center',
     maxWidth: 132,
@@ -4833,7 +4959,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   siteChipActive: {
-    backgroundColor: '#2f80ed',
+    borderColor: 'rgba(47, 125, 246, 0.52)',
   },
   siteChipText: {
     color: '#111111',
@@ -4842,7 +4968,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   siteChipTextActive: {
-    color: '#ffffff',
+    color: COLORS.blue,
   },
   selectedSiteText: {
     color: '#111111',
@@ -4851,7 +4977,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   selectedDetailPanel: {
-    backgroundColor: '#f7f7f8',
+    ...GLASS_PANEL_STYLE,
     borderRadius: 16,
     gap: 4,
     padding: 12,
@@ -4874,8 +5000,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   episodeButton: {
+    ...GLASS_BUTTON_STYLE,
     alignItems: 'center',
-    backgroundColor: '#eeeeef',
     borderRadius: 12,
     justifyContent: 'center',
     minHeight: 38,
@@ -4923,7 +5049,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   diagnosticsPanel: {
-    backgroundColor: '#f7f7f8',
+    ...GLASS_PANEL_STYLE,
     borderRadius: 18,
     gap: 10,
     padding: 12,
@@ -4941,10 +5067,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   diagnosticTile: {
-    backgroundColor: '#ffffff',
-    borderColor: '#ededf2',
+    ...GLASS_BUTTON_STYLE,
     borderRadius: 14,
-    borderWidth: 1,
     gap: 2,
     minHeight: 52,
     paddingHorizontal: 10,
@@ -5122,7 +5246,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sourceManageCard: {
-    backgroundColor: '#f7f7f8',
+    ...GLASS_BUTTON_STYLE,
     borderRadius: 18,
     gap: 10,
     padding: 12,
@@ -5144,11 +5268,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sourceRenameInput: {
-    backgroundColor: '#ffffff',
-    borderColor: '#dbeafe',
+    ...GLASS_INPUT_STYLE,
     borderRadius: 12,
-    borderWidth: 1,
-    color: '#111111',
+    color: COLORS.ink,
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: 0,
@@ -5156,21 +5278,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   miniActionButton: {
+    ...GLASS_BUTTON_STYLE,
     alignItems: 'center',
-    backgroundColor: '#eeeeef',
     borderRadius: 12,
     justifyContent: 'center',
     minHeight: 34,
     paddingHorizontal: 11,
   },
   miniActionPrimary: {
-    backgroundColor: '#34c759',
+    backgroundColor: 'rgba(52, 199, 89, 0.18)',
+    borderColor: 'rgba(52, 199, 89, 0.48)',
   },
   miniActionBlue: {
-    backgroundColor: '#e7f1ff',
+    backgroundColor: 'rgba(47, 125, 246, 0.18)',
+    borderColor: 'rgba(47, 125, 246, 0.48)',
   },
   miniActionDanger: {
-    backgroundColor: '#fff1f2',
+    backgroundColor: 'rgba(255, 59, 48, 0.12)',
+    borderColor: 'rgba(255, 59, 48, 0.38)',
   },
   miniActionText: {
     color: '#111111',
@@ -5197,8 +5322,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   sourceRow: {
+    ...GLASS_BUTTON_STYLE,
     alignItems: 'center',
-    backgroundColor: '#f7f7f8',
     borderRadius: 16,
     flexDirection: 'row',
     gap: 10,
@@ -5211,49 +5336,48 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   bottomTabs: {
+    ...GLASS_NAV_STYLE,
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.84)',
-    borderColor: 'rgba(210, 210, 215, 0.72)',
-    borderRadius: 34,
-    borderWidth: 1,
-    bottom: 12,
-    boxShadow: '0 12px 30px rgba(0, 0, 0, 0.18)',
+    borderRadius: 37,
+    bottom: 11,
     flexDirection: 'row',
     gap: 4,
     left: 44,
-    padding: 6,
+    minHeight: 72,
+    paddingHorizontal: 16,
+    paddingVertical: 5,
     position: 'absolute',
     right: 44,
   },
   bottomTab: {
     alignItems: 'center',
-    borderRadius: 28,
+    borderRadius: 999,
     flex: 1,
     gap: 2,
     justifyContent: 'center',
-    minHeight: 50,
+    minHeight: 62,
   },
   bottomTabActive: {
-    backgroundColor: 'rgba(47, 128, 237, 0.16)',
+    ...GLASS_ACTIVE_OUTLINE_STYLE,
   },
   bottomTabSymbol: {
-    color: '#111111',
-    fontSize: 21,
+    color: COLORS.ink,
+    fontSize: 24,
     fontWeight: '900',
     letterSpacing: 0,
-    lineHeight: 23,
+    lineHeight: 27,
   },
   bottomTabSymbolActive: {
-    color: '#2f80ed',
+    color: COLORS.blue,
   },
   bottomTabText: {
-    color: '#111111',
-    fontSize: 11,
+    color: COLORS.ink,
+    fontSize: 12,
     fontWeight: '900',
     letterSpacing: 0,
   },
   bottomTabTextActive: {
-    color: '#2f80ed',
+    color: COLORS.blue,
   },
   overlayBackdrop: {
     bottom: 0,
@@ -5277,7 +5401,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 26,
   },
   searchOverlayCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: COLORS.page,
     borderRadius: 28,
     boxShadow: '0 24px 60px rgba(0, 0, 0, 0.22)',
     gap: 16,
@@ -5298,9 +5422,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   searchOverlayInput: {
-    backgroundColor: '#f2f2f7',
+    ...GLASS_INPUT_STYLE,
     borderRadius: 19,
-    color: '#111111',
+    color: COLORS.ink,
     fontSize: 18,
     letterSpacing: 0,
     minHeight: 54,
