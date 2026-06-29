@@ -76,6 +76,7 @@ async function searchAcrossSites({
               getCompletedCount: () => completedCount,
               keyword,
               notifyProgress,
+              searchSite,
               searchSiteBatch,
               sites: unit.sites,
               targetCount: targets.length,
@@ -203,6 +204,7 @@ async function runBatchSearchUnit({
   getCompletedCount,
   keyword,
   notifyProgress,
+  searchSite,
   searchSiteBatch,
   sites,
   targetCount,
@@ -214,7 +216,25 @@ async function runBatchSearchUnit({
       .filter((site) => site?.siteBasePath)
       .map((site) => [normalizeSiteBasePath(site.siteBasePath), site])
   );
-  const batchResult = await searchSiteBatch(sites, keyword);
+  let batchResult;
+
+  try {
+    batchResult = await searchSiteBatch(sites, keyword);
+  } catch (error) {
+    if (error?.batchUnsupported) {
+      return runBatchFallbackAsSingleSearches({
+        getCompletedCount,
+        keyword,
+        notifyProgress,
+        searchSite,
+        sites,
+        targetCount,
+        updateCompletedCount,
+      });
+    }
+
+    throw error;
+  }
   const normalizedResults = normalizeBatchResultSources(
     batchResult?.results || [],
     sites,
@@ -291,6 +311,61 @@ async function runBatchSearchUnit({
   return {
     failures: normalizedFailures,
     results: normalizedResults,
+  };
+}
+
+async function runBatchFallbackAsSingleSearches({
+  getCompletedCount,
+  keyword,
+  notifyProgress,
+  searchSite,
+  sites,
+  targetCount,
+  updateCompletedCount,
+}) {
+  if (typeof searchSite !== 'function') {
+    throw new Error('批量搜索接口不可用，请更新或重启本地解析器');
+  }
+
+  const results = [];
+  const failures = [];
+
+  for (const site of sites) {
+    try {
+      const unitResult = await runSingleSearchUnit({
+        getCompletedCount,
+        keyword,
+        notifyProgress,
+        searchSite,
+        site,
+        targetCount,
+        updateCompletedCount,
+      });
+
+      results.push(...unitResult.results);
+    } catch (error) {
+      const completedCount = getCompletedCount() + 1;
+      const failure = {
+        sourceId: site.id,
+        sourceName: site.name || site.id,
+        message: error?.message || '搜索失败',
+      };
+
+      updateCompletedCount(completedCount);
+      failures.push(failure);
+      notifyProgress({
+        completedCount,
+        failure,
+        site,
+        targetCount,
+        type: 'failure',
+      });
+    }
+  }
+
+  return {
+    failures,
+    results,
   };
 }
 

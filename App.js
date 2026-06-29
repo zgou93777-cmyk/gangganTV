@@ -151,6 +151,8 @@ const STORAGE_KEYS = {
   searchHistory: 'iptv.prototype.searchHistory',
   pluginServerUrl: 'iptv.prototype.pluginServerUrl',
   pluginServerToken: 'iptv.prototype.pluginServerToken',
+  pluginSourceCache: 'iptv.prototype.pluginSourceCache',
+  discoverFeedCache: 'iptv.prototype.discoverFeedCache',
 };
 
 const LABELS = {
@@ -332,6 +334,8 @@ export default function App() {
       storedSearchHistory,
       storedPluginServerUrl,
       storedPluginServerToken,
+      storedPluginSourceCache,
+      storedDiscoverFeedCache,
     ] = await Promise.all([
       AsyncStorage.getItem(STORAGE_KEYS.vod),
       AsyncStorage.getItem(STORAGE_KEYS.configUrl),
@@ -342,6 +346,8 @@ export default function App() {
       AsyncStorage.getItem(STORAGE_KEYS.searchHistory),
       AsyncStorage.getItem(STORAGE_KEYS.pluginServerUrl),
       AsyncStorage.getItem(STORAGE_KEYS.pluginServerToken),
+      AsyncStorage.getItem(STORAGE_KEYS.pluginSourceCache),
+      AsyncStorage.getItem(STORAGE_KEYS.discoverFeedCache),
     ]);
 
     const nextSources = parseStoredArray(storedSources);
@@ -357,6 +363,10 @@ export default function App() {
     setSites(nextSites);
     setPlayHistory(nextPlayHistory);
     setSearchHistory(nextSearchHistory);
+    restoreCachedParserData({
+      discoverFeedCache: storedDiscoverFeedCache,
+      pluginSourceCache: storedPluginSourceCache,
+    });
     const restoredPluginSource = nextSources.find((source) => source?.kind === 'plugin');
     if (restoredPluginSource) {
       const restoredPluginSite = nextSites.find(
@@ -416,6 +426,32 @@ export default function App() {
     await playResolvedUrl(playbackType, cleanUrl, `${LABELS[playbackType]}地址`, {
       sourceName: '点播直链',
     });
+  }
+
+  function restoreCachedParserData({ discoverFeedCache, pluginSourceCache } = {}) {
+    const cachedSites = normalizeStoredSites(parseStoredArray(pluginSourceCache));
+    const cachedDiscoverResults = parseStoredArray(discoverFeedCache);
+
+    if (cachedSites.length) {
+      setSites((currentSites) => {
+        const existingIds = new Set(currentSites.map((site) => site.id));
+        const nextSites = [
+          ...currentSites,
+          ...cachedSites.filter((site) => !existingIds.has(site.id)),
+        ];
+
+        return nextSites;
+      });
+    }
+
+    if (cachedDiscoverResults.length) {
+      setSourceDiscoverResults(cachedDiscoverResults.slice(0, 30));
+      setMessage('已从本地缓存载入首页内容，后台会继续刷新');
+    }
+  }
+
+  function saveDiscoverFeedCache(results) {
+    return saveJson(STORAGE_KEYS.discoverFeedCache, (results || []).slice(0, 30));
   }
 
   async function playResolvedUrl(type, url, title, historyMeta = {}) {
@@ -1032,6 +1068,9 @@ export default function App() {
       saveJson(STORAGE_KEYS.sites, nextSites).catch(() =>
         setMessage('本地解析器站点保存失败')
       );
+      saveJson(STORAGE_KEYS.pluginSourceCache, serverSites).catch(() =>
+        setMessage('本地解析器来源缓存保存失败')
+      );
       AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, firstSite.id).catch(() =>
         setMessage('默认站点保存失败')
       );
@@ -1363,6 +1402,15 @@ export default function App() {
     setMessage('已清空搜索历史');
   }
 
+  async function clearLocalParserCache() {
+    await Promise.all([
+      AsyncStorage.removeItem(STORAGE_KEYS.pluginSourceCache),
+      AsyncStorage.removeItem(STORAGE_KEYS.discoverFeedCache),
+    ]);
+    setSourceDiscoverResults([]);
+    setMessage('已清理本地缓存，源地址和播放历史已保留');
+  }
+
   async function loadDetail(result) {
     const resultSite = resolveResultRuntimeSite({
       result,
@@ -1524,7 +1572,6 @@ export default function App() {
       }
     );
   }
-
   function getPluginServerSearchBatchKey(site) {
     if (!isPluginServerSite(site) || !site?.siteBasePath) {
       return '';
@@ -1563,14 +1610,22 @@ export default function App() {
           )
         : await fetchTvBoxHome(selectedSite);
       setSourceDiscoverResults(results.slice(0, 30));
+      saveDiscoverFeedCache(results).catch(() =>
+        setMessage('首页缓存保存失败')
+      );
     } catch {
       try {
         const fallbackResults = isPluginServerSite(selectedSite)
           ? await fetchPluginServerHome(buildPluginServerConfig(selectedSite))
           : [];
         setSourceDiscoverResults(fallbackResults.slice(0, 30));
+        saveDiscoverFeedCache(fallbackResults).catch(() =>
+          setMessage('首页缓存保存失败')
+        );
       } catch {
-        setSourceDiscoverResults([]);
+        if (!sourceDiscoverResults.length) {
+          setSourceDiscoverResults([]);
+        }
       }
     } finally {
       setLoadingDiscoverFeed(false);
@@ -2434,6 +2489,24 @@ export default function App() {
               </Text>
             </View>
           ) : null}
+        </View>
+
+        <View style={styles.settingsSectionLabelWrap}>
+          <Text style={styles.settingsSectionLabel}>本地缓存</Text>
+        </View>
+        <View style={styles.settingsGroup}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.sectionTitle}>本地缓存</Text>
+            <Text style={styles.sectionHint}>缓存插件来源和首页海报，下次进入会先显示缓存再后台刷新</Text>
+          </View>
+          <CompactButton
+            onPress={() =>
+              clearLocalParserCache().catch(() => setMessage('本地缓存清理失败'))
+            }
+            variant="plain"
+          >
+            清理本地缓存
+          </CompactButton>
         </View>
 
         <View style={styles.settingsSectionLabelWrap}>

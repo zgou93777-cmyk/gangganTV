@@ -30,11 +30,20 @@ async function fetchPluginServerSearchBatch(
   { keyword = '', siteBasePaths = [] } = {},
   fetchImpl = fetch
 ) {
-  const payload = await postPluginServer(config, '/catvod/search-batch', {
-    keyword,
-    scriptUrl: config?.scriptUrl,
-    siteBasePaths,
-  }, fetchImpl);
+  let payload;
+
+  try {
+    payload = await postPluginServer(config, '/catvod/search-batch', {
+      keyword,
+      scriptUrl: config?.scriptUrl,
+      siteBasePaths,
+    }, fetchImpl);
+  } catch (error) {
+    if (isBatchRouteUnavailable(error)) {
+      error.batchUnsupported = true;
+    }
+    throw error;
+  }
   const results = (Array.isArray(payload?.results) ? payload.results : []).flatMap(
     (entry) =>
       normalizeCatVodSearchResult(entry).map((result) => ({
@@ -142,6 +151,10 @@ function formatPluginServerError(status, payload) {
     return '插件解析服务 Token 不正确或未填写，请检查设置里的 Token';
   }
 
+  if (status === 404 && code === 'not_found') {
+    return '批量搜索接口不可用，请更新或重启本地解析器';
+  }
+
   if (code === 'PLUGIN_CONFIG_UNSUPPORTED') {
     return '这个地址是 TVBox/OK 配置，不是可直接执行的 CatVod JS 插件；其中的 JAR/CSP 站点暂不兼容';
   }
@@ -167,6 +180,10 @@ function formatPluginServerError(status, payload) {
   }
 
   return `插件解析服务请求失败：HTTP ${status}${message ? ` ${message}` : ''}`;
+}
+
+function isBatchRouteUnavailable(error) {
+  return /批量搜索接口不可用|Route not found|HTTP 404/i.test(error?.message || '');
 }
 
 function isCookieLoginRequired(message) {

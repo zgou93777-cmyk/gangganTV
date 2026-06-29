@@ -416,6 +416,35 @@ test('plugin server client can call a local parser without a token', async () =>
   ]);
 });
 
+test('fetchPluginServerSearchBatch marks old local parser 404 as unsupported batch route', async () => {
+  await assert.rejects(
+    () =>
+      fetchPluginServerSearchBatch(
+        {
+          baseUrl: 'http://192.168.220.41:3000',
+          scriptUrl: 'https://cat.example.com/index.js',
+        },
+        {
+          keyword: '甄嬛传',
+          siteBasePaths: ['/spider/guazi/3'],
+        },
+        async () =>
+          jsonResponse(
+            {
+              error: 'not_found',
+              message: 'Route not found.',
+            },
+            404
+          )
+      ),
+    (error) => {
+      assert.equal(error.batchUnsupported, true);
+      assert.match(error.message, /批量搜索接口不可用|更新或重启本地解析器/);
+      return true;
+    }
+  );
+});
+
 function jsonResponse(body, status = 200) {
   return {
     ok: status >= 200 && status < 300,

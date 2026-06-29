@@ -44,6 +44,14 @@ test('local parser setup does not require a token before saving or checking', ()
   assert.equal(appSource.includes('Token（可选）'), true);
 });
 
+test('settings exposes local cache cleanup for parser data', () => {
+  const settingsSource = renderSettingsSource();
+
+  assert.equal(settingsSource.includes('本地缓存'), true);
+  assert.equal(settingsSource.includes('清理本地缓存'), true);
+  assert.equal(settingsSource.includes('clearLocalParserCache'), true);
+});
+
 test('settings screen hides developer batch diagnostics and plugin verification', () => {
   const settingsSource = renderSettingsSource();
 

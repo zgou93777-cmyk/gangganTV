@@ -48,6 +48,13 @@ test('app startup warms up restored CatVod plugin sources automatically', () => 
   assert.equal(appSource.includes('启动时未自动加载源'), false);
 });
 
+test('app restores cached parser sources and home posters before refreshing', () => {
+  assert.equal(appSource.includes('STORAGE_KEYS.pluginSourceCache'), true);
+  assert.equal(appSource.includes('STORAGE_KEYS.discoverFeedCache'), true);
+  assert.equal(appSource.includes('restoreCachedParserData'), true);
+  assert.equal(appSource.includes('saveDiscoverFeedCache'), true);
+});
+
 test('discover loading state explains the selected local parser source is loading', () => {
   assert.equal(appSource.includes('正在读取当前源首页'), false);
   assert.equal(appSource.includes('正在读取本地解析器首页'), true);

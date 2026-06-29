@@ -282,3 +282,32 @@ test('searchAcrossSites batches sources with the same batch key while keeping pe
     ]
   );
 });
+
+test('searchAcrossSites falls back to single-source search when batch route is unavailable', async () => {
+  const singleCalls = [];
+
+  const result = await searchAcrossSites({
+    getSearchBatchKey: (site) => site.batchKey || '',
+    keyword: '甄嬛传',
+    searchSite: async (site) => {
+      singleCalls.push(site.id);
+      return [{ id: `${site.id}-result`, name: site.name }];
+    },
+    searchSiteBatch: async () => {
+      const error = new Error('批量搜索接口不可用，请更新或重启本地解析器');
+      error.batchUnsupported = true;
+      throw error;
+    },
+    sites: [
+      { batchKey: 'cat-script', id: 'cat-one', name: '一号源', searchable: true },
+      { batchKey: 'cat-script', id: 'cat-two', name: '二号源', searchable: true },
+    ],
+  });
+
+  assert.deepEqual(singleCalls, ['cat-one', 'cat-two']);
+  assert.deepEqual(
+    result.results.map((item) => item.sourceId),
+    ['cat-one', 'cat-two']
+  );
+  assert.deepEqual(result.failures, []);
+});

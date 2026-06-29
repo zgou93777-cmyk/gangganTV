@@ -1,8 +1,8 @@
 const { fork } = require('node:child_process');
 const path = require('node:path');
 
-const DEFAULT_TIMEOUT_MS = 15_000;
-const DEFAULT_SCRIPT_TIMEOUT_MS = 5_000;
+const DEFAULT_TIMEOUT_MS = 120_000;
+const DEFAULT_SCRIPT_TIMEOUT_MS = 30_000;
 
 class CatVodRunner {
   constructor(options = {}) {
