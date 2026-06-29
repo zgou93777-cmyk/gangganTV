@@ -87,6 +87,10 @@ const {
   filterResultsByBucket,
 } = require('./src/search-buckets');
 const {
+  addSearchHistoryKeyword,
+  normalizeSearchHistory,
+} = require('./src/search-history');
+const {
   resolveResultRuntimeSite,
 } = require('./src/search-result-runtime');
 const {
@@ -131,6 +135,7 @@ const STORAGE_KEYS = {
   sites: 'iptv.prototype.sites',
   selectedSiteId: 'iptv.prototype.selectedSiteId',
   playHistory: 'iptv.prototype.playHistory',
+  searchHistory: 'iptv.prototype.searchHistory',
   pluginServerUrl: 'iptv.prototype.pluginServerUrl',
   pluginServerToken: 'iptv.prototype.pluginServerToken',
 };
@@ -163,6 +168,7 @@ export default function App() {
   const [sites, setSites] = useState([]);
   const [selectedSiteId, setSelectedSiteId] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [searchHistory, setSearchHistory] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
   const [searchFailures, setSearchFailures] = useState([]);
   const [activeSearchBucketId, setActiveSearchBucketId] = useState('all');
@@ -288,6 +294,7 @@ export default function App() {
       storedSites,
       storedSelectedSiteId,
       storedPlayHistory,
+      storedSearchHistory,
       storedPluginServerUrl,
       storedPluginServerToken,
     ] = await Promise.all([
@@ -297,6 +304,7 @@ export default function App() {
       AsyncStorage.getItem(STORAGE_KEYS.sites),
       AsyncStorage.getItem(STORAGE_KEYS.selectedSiteId),
       AsyncStorage.getItem(STORAGE_KEYS.playHistory),
+      AsyncStorage.getItem(STORAGE_KEYS.searchHistory),
       AsyncStorage.getItem(STORAGE_KEYS.pluginServerUrl),
       AsyncStorage.getItem(STORAGE_KEYS.pluginServerToken),
     ]);
@@ -304,6 +312,7 @@ export default function App() {
     const nextSources = parseStoredArray(storedSources);
     const nextSites = normalizeStoredSites(parseStoredArray(storedSites));
     const nextPlayHistory = normalizePlayHistory(parseStoredArray(storedPlayHistory));
+    const nextSearchHistory = normalizeSearchHistory(parseStoredArray(storedSearchHistory));
 
     setVodUrl(storedVodUrl || '');
     setPluginServerUrl(storedPluginServerUrl || '');
@@ -312,6 +321,7 @@ export default function App() {
     setConfigSources(nextSources);
     setSites(nextSites);
     setPlayHistory(nextPlayHistory);
+    setSearchHistory(nextSearchHistory);
 
     if (nextSites.some((site) => site.id === storedSelectedSiteId)) {
       setSelectedSiteId(storedSelectedSiteId);
@@ -1020,6 +1030,11 @@ export default function App() {
   }
 
   async function searchSelectedSite(keywordOverride) {
+    if (loadingSearch) {
+      setMessage('正在搜索，请稍候');
+      return;
+    }
+
     const cleanKeyword =
       typeof keywordOverride === 'string'
         ? keywordOverride.trim()
@@ -1048,6 +1063,11 @@ export default function App() {
     setMessage(buildSearchLoadingMessage({ targetCount: targets.length }));
     setSearchFailures([]);
     setActiveSearchBucketId('all');
+    const nextSearchHistory = addSearchHistoryKeyword(searchHistory, cleanKeyword);
+    setSearchHistory(nextSearchHistory);
+    saveJson(STORAGE_KEYS.searchHistory, nextSearchHistory).catch(() =>
+      setMessage('搜索历史保存失败')
+    );
 
     try {
       const { failures, results, targets: searchedTargets } = await searchAcrossSites({
@@ -1107,6 +1127,12 @@ export default function App() {
   async function searchWithKeyword(keyword) {
     setSearchKeyword(keyword);
     await searchSelectedSite(keyword);
+  }
+
+  async function clearSearchHistory() {
+    setSearchHistory([]);
+    await saveJson(STORAGE_KEYS.searchHistory, []);
+    setMessage('已清空搜索历史');
   }
 
   async function loadDetail(result) {
@@ -2165,6 +2191,7 @@ export default function App() {
             <TextInput
               autoFocus
               autoCorrect={false}
+              editable={!loadingSearch}
               onChangeText={setOverlayKeyword}
               onSubmitEditing={() =>
                 submitOverlaySearch().catch(() => setMessage('搜索失败'))
@@ -2175,6 +2202,57 @@ export default function App() {
               style={styles.searchOverlayInput}
               value={overlayKeyword}
             />
+            {searchHistory.length ? (
+              <View style={styles.searchHistoryBlock}>
+                <View style={styles.searchHistoryHeader}>
+                  <Text style={styles.searchHistoryTitle}>搜索历史</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={loadingSearch}
+                    onPress={() =>
+                      clearSearchHistory().catch(() =>
+                        setMessage('搜索历史清空失败')
+                      )
+                    }
+                    style={({ pressed }) => [
+                      styles.searchHistoryClear,
+                      loadingSearch && styles.buttonDisabled,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={styles.searchHistoryClearText}>清空</Text>
+                  </Pressable>
+                </View>
+                <View style={styles.searchHistoryChips}>
+                  {searchHistory.slice(0, 8).map((keyword) => (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={loadingSearch}
+                      key={keyword}
+                      onPress={() => {
+                        setOverlayKeyword(keyword);
+                        setSearchOverlayOpen(false);
+                        setSearchKeyword(keyword);
+                        setActivePage('searchResults');
+                        setActiveTab('discover');
+                        searchWithKeyword(keyword).catch(() =>
+                          setMessage('搜索失败')
+                        );
+                      }}
+                      style={({ pressed }) => [
+                        styles.searchHistoryChip,
+                        loadingSearch && styles.buttonDisabled,
+                        pressed && styles.buttonPressed,
+                      ]}
+                    >
+                      <Text numberOfLines={1} style={styles.searchHistoryChipText}>
+                        {keyword}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ) : null}
             <View style={styles.buttonRow}>
               <CompactButton
                 onPress={() => setSearchOverlayOpen(false)}
@@ -2228,6 +2306,27 @@ export default function App() {
             style={styles.searchPageInput}
             value={searchKeyword}
           />
+          {searchKeyword ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={loadingSearch}
+              onPress={() => {
+                setSearchKeyword('');
+                setOverlayKeyword('');
+                setSearchResults([]);
+                setSearchFailures([]);
+                setActiveSearchBucketId('all');
+                setMessage('已清空搜索');
+              }}
+              style={({ pressed }) => [
+                styles.searchSourceButton,
+                loadingSearch && styles.buttonDisabled,
+                pressed && styles.buttonPressed,
+              ]}
+            >
+              <Text style={styles.searchClearText}>清空</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             disabled={loadingSearch}
@@ -2259,7 +2358,27 @@ export default function App() {
                 </Text>
               </View>
             ) : searchResults.length || searchFailures.length ? (
-              renderVodResultGrid(vodResultCards)
+              <>
+                {renderVodResultGrid(vodResultCards)}
+                {searchFailures.length ? (
+                  <View style={styles.searchFailurePanel}>
+                    <Text style={styles.searchFailureTitle}>失败来源</Text>
+                    {searchFailures.map((failure) => (
+                      <View
+                        key={`${failure.sourceId}-${failure.sourceName}`}
+                        style={styles.searchFailureItem}
+                      >
+                        <Text numberOfLines={1} style={styles.searchFailureName}>
+                          {failure.sourceName || failure.sourceId || '未知来源'}
+                        </Text>
+                        <Text selectable style={styles.searchFailureMessage}>
+                          {failure.message || '搜索失败'}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+              </>
             ) : (
               <View style={styles.searchEmptyState}>
                 <Text style={styles.sectionTitle}>输入关键词开始搜索</Text>
@@ -4645,6 +4764,12 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0,
   },
+  searchClearText: {
+    color: COLORS.ink,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
   searchPageBody: {
     alignItems: 'flex-start',
     flex: 1,
@@ -4664,6 +4789,37 @@ const styles = StyleSheet.create({
     gap: 6,
     padding: 16,
     paddingTop: 36,
+  },
+  searchFailurePanel: {
+    ...GLASS_PANEL_STYLE,
+    borderRadius: 18,
+    gap: 10,
+    marginTop: 16,
+    padding: 14,
+  },
+  searchFailureTitle: {
+    color: COLORS.ink,
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  searchFailureItem: {
+    ...GLASS_BUTTON_STYLE,
+    borderRadius: 14,
+    gap: 4,
+    padding: 10,
+  },
+  searchFailureName: {
+    color: COLORS.ink,
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  searchFailureMessage: {
+    color: COLORS.muted,
+    fontSize: 12,
+    letterSpacing: 0,
+    lineHeight: 17,
   },
   searchRail: {
     maxHeight: 560,
@@ -5836,5 +5992,52 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     minHeight: 54,
     paddingHorizontal: 18,
+  },
+  searchHistoryBlock: {
+    gap: 10,
+  },
+  searchHistoryHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  searchHistoryTitle: {
+    color: COLORS.ink,
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  searchHistoryClear: {
+    ...GLASS_BUTTON_STYLE,
+    alignItems: 'center',
+    borderRadius: 13,
+    justifyContent: 'center',
+    minHeight: 28,
+    paddingHorizontal: 10,
+  },
+  searchHistoryClearText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  searchHistoryChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  searchHistoryChip: {
+    ...GLASS_BUTTON_STYLE,
+    borderRadius: 16,
+    maxWidth: '48%',
+    minHeight: 32,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+  },
+  searchHistoryChipText: {
+    color: COLORS.ink,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0,
   },
 });
