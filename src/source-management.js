@@ -63,6 +63,28 @@ function selectDefaultSource({ sourceId, sites = [] } = {}) {
   return firstUsableSiteId(sites.filter((site) => site?.sourceId === sourceId));
 }
 
+function replaceWithSingleSource({
+  selectedSearchSourceIds = [],
+  selectedSiteId = '',
+  source = null,
+  sites = [],
+} = {}) {
+  const nextSources = source ? [source] : [];
+  const nextSites = Array.isArray(sites) ? sites : [];
+  const nextSelectedSiteId = nextSites.some((site) => site?.id === selectedSiteId)
+    ? selectedSiteId
+    : firstUsableSiteId(nextSites);
+
+  return {
+    selectedSearchSourceIds: selectedSearchSourceIds.filter((id) =>
+      nextSites.some((site) => site?.id === id)
+    ),
+    selectedSiteId: nextSelectedSiteId,
+    sources: nextSources,
+    sites: nextSites,
+  };
+}
+
 function buildSourceStatus({ selectedSiteId = '', source = {}, sites = [] } = {}) {
   const sourceSites = sites.filter((site) => site?.sourceId === source?.id);
   const searchableSites = sourceSites.filter(
@@ -125,5 +147,6 @@ module.exports = {
   buildSourceStatus,
   deleteConfigSource,
   renameConfigSource,
+  replaceWithSingleSource,
   selectDefaultSource,
 };

@@ -5,6 +5,7 @@ const {
   buildSourceStatus,
   deleteConfigSource,
   renameConfigSource,
+  replaceWithSingleSource,
   selectDefaultSource,
 } = require('../src/source-management');
 
@@ -111,6 +112,59 @@ test('selectDefaultSource returns the first usable site for a source', () => {
   });
 
   assert.equal(selectedSiteId, 'usable');
+});
+
+test('replaceWithSingleSource keeps only the imported source and its sites', () => {
+  const result = replaceWithSingleSource({
+    selectedSearchSourceIds: ['old-site', 'new-site'],
+    selectedSiteId: 'old-site',
+    source: {
+      id: 'new-source',
+      name: 'New Source',
+      url: 'https://example.com/new.json',
+    },
+    sites: [
+      {
+        id: 'new-site',
+        searchable: true,
+        sourceId: 'new-source',
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    result.sources.map((source) => source.id),
+    ['new-source']
+  );
+  assert.deepEqual(
+    result.sites.map((site) => site.id),
+    ['new-site']
+  );
+  assert.equal(result.selectedSiteId, 'new-site');
+  assert.deepEqual(result.selectedSearchSourceIds, ['new-site']);
+});
+
+test('replaceWithSingleSource clears selection when the new source has no usable site', () => {
+  const result = replaceWithSingleSource({
+    selectedSearchSourceIds: ['old-site'],
+    selectedSiteId: 'old-site',
+    source: {
+      id: 'new-source',
+      name: 'New Source',
+      url: 'https://example.com/new.json',
+    },
+    sites: [
+      {
+        id: 'blocked-site',
+        searchable: true,
+        sourceId: 'new-source',
+        unsupportedReason: 'not ready',
+      },
+    ],
+  });
+
+  assert.equal(result.selectedSiteId, '');
+  assert.deepEqual(result.selectedSearchSourceIds, []);
 });
 
 test('buildSourceStatus summarizes source availability for the settings UI', () => {

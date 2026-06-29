@@ -26,6 +26,7 @@ test('App shell does not expose live source workflows while focused on VOD', () 
 test('App settings copy emphasizes CatVod VOD and local parser workflow', () => {
   assert.equal(appSource.includes('插件解析服务'), false);
   assert.equal(appSource.includes('本地 TVBox runtime'), false);
-  assert.equal(appSource.includes('CatVod 点播'), true);
+  assert.equal(appSource.includes('已验证可用的 CatVod'), true);
   assert.equal(appSource.includes('本地解析器'), true);
+  assert.equal(appSource.includes('导入新源会覆盖旧源'), true);
 });

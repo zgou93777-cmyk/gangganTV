@@ -97,6 +97,7 @@ const {
   buildSourceStatus,
   deleteConfigSource,
   renameConfigSource,
+  replaceWithSingleSource,
   selectDefaultSource,
 } = require('./src/source-management');
 const {
@@ -535,18 +536,23 @@ export default function App() {
           kind: 'plugin',
           reason: classification.reason,
         };
-        const nextSources = upsertById(configSources, pluginSource);
         const serverSite = buildPluginServerSite(pluginSource, cleanUrl);
-        const nextSites = upsertById(sites, serverSite);
+        const nextState = replaceWithSingleSource({
+          selectedSearchSourceIds: [serverSite.id],
+          selectedSiteId: serverSite.id,
+          source: pluginSource,
+          sites: [serverSite],
+        });
 
-        setConfigSources(nextSources);
-        setSites(nextSites);
-        setSelectedSiteId(serverSite.id);
+        setConfigSources(nextState.sources);
+        setSites(nextState.sites);
+        setSelectedSiteId(nextState.selectedSiteId);
+        setSelectedSearchSourceIds([serverSite.id]);
         await Promise.all([
           AsyncStorage.setItem(STORAGE_KEYS.configUrl, cleanUrl),
-          saveJson(STORAGE_KEYS.configSources, nextSources),
-          saveJson(STORAGE_KEYS.sites, nextSites),
-          AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, serverSite.id),
+          saveJson(STORAGE_KEYS.configSources, nextState.sources),
+          saveJson(STORAGE_KEYS.sites, nextState.sites),
+          AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, nextState.selectedSiteId),
         ]);
         loadPluginServerSite(pluginSource, cleanUrl);
         setMessage(
@@ -563,7 +569,6 @@ export default function App() {
         kind: 'config',
         reason: '',
       };
-      const nextSources = upsertById(configSources, source);
       const importedSites = parsed.sites.map((site) => ({
         ...site,
         id: `${source.id}#${site.id}`,
@@ -572,25 +577,25 @@ export default function App() {
         sourceId: source.id,
         sourceName: source.name,
       }));
-      const nextSites = [
-        ...sites.filter((site) => site.sourceId !== source.id),
-        ...importedSites,
-      ];
-      const nextSelectedSiteId =
-        firstUsableSiteId(importedSites) || firstUsableSiteId(nextSites);
+      const nextState = replaceWithSingleSource({
+        selectedSearchSourceIds: [],
+        source,
+        sites: importedSites,
+      });
 
-      setConfigSources(nextSources);
-      setSites(nextSites);
-      setSelectedSiteId(nextSelectedSiteId);
+      setConfigSources(nextState.sources);
+      setSites(nextState.sites);
+      setSelectedSiteId(nextState.selectedSiteId);
+      setSelectedSearchSourceIds(nextState.selectedSearchSourceIds);
       setSearchResults([]);
       setSelectedResult(null);
       setSelectedDetail(null);
 
       await Promise.all([
         AsyncStorage.setItem(STORAGE_KEYS.configUrl, cleanUrl),
-        saveJson(STORAGE_KEYS.configSources, nextSources),
-        saveJson(STORAGE_KEYS.sites, nextSites),
-        AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, nextSelectedSiteId),
+        saveJson(STORAGE_KEYS.configSources, nextState.sources),
+        saveJson(STORAGE_KEYS.sites, nextState.sites),
+        AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, nextState.selectedSiteId),
       ]);
       setMessage(`已导入 ${importedSites.length} 个站点`);
     } catch (importError) {
@@ -1964,29 +1969,34 @@ export default function App() {
         </View>
 
         <View style={styles.settingsSectionLabelWrap}>
-          <Text style={styles.settingsSectionLabel}>源地址</Text>
+          <Text style={styles.settingsSectionLabel}>当前点播源</Text>
         </View>
         <View style={styles.settingsGroup}>
           <View style={styles.sourceAddressRow}>
             <View style={styles.rowMain}>
               <Text style={styles.sourceAddressName}>
-                {selectedSite ? selectedSite.name : '未选择点播源'}
+                {selectedSite ? selectedSite.name : '未配置点播源'}
               </Text>
               <Text numberOfLines={2} selectable style={styles.sourceAddressUrl}>
-                {configUrl || '导入点播配置后会显示在这里'}
+                {configUrl || '填写源地址后会固定使用这一条源'}
               </Text>
             </View>
-            <Text style={styles.rowAction}>更改</Text>
+            <Text style={styles.rowAction}>
+              {selectedSite ? '使用中' : '未启用'}
+            </Text>
           </View>
+          <Text style={styles.helperText}>
+            当前版本按单源使用：导入新源会覆盖旧源，搜索页默认只搜索这一条源。
+          </Text>
         </View>
 
         <View style={styles.settingsSectionLabelWrap}>
-          <Text style={styles.settingsSectionLabel}>点播</Text>
+          <Text style={styles.settingsSectionLabel}>源地址</Text>
         </View>
         <View style={styles.settingsGroup}>
           <View style={styles.panelHeader}>
-            <Text style={styles.sectionTitle}>配置接口</Text>
-            <Text style={styles.sectionHint}>粘贴 TVBox/OK 影视 JSON URL</Text>
+            <Text style={styles.sectionTitle}>点播源接口</Text>
+            <Text style={styles.sectionHint}>粘贴已验证可用的 CatVod/TVBox 地址</Text>
           </View>
           <TextInput
             autoCapitalize="none"
@@ -2006,15 +2016,6 @@ export default function App() {
             >
               {loadingConfig ? '导入中' : '导入配置'}
             </CompactButton>
-            <CompactButton
-              disabled={loadingConfig}
-              onPress={() =>
-                importBuiltInTestSource().catch(() => setMessage('测试源导入失败'))
-              }
-              variant="plain"
-            >
-              测试源
-            </CompactButton>
           </View>
           <CompactButton
             disabled={loadingConfig}
@@ -2029,8 +2030,18 @@ export default function App() {
             导入 CatVod 测试源
           </CompactButton>
           <Text style={styles.helperText}>
-            当前主线只适配 CatVod 点播。先启动你电脑上的本地解析器，再导入 CatVod 测试源；OK影视/TVBox 的 csp Spider 源可以先导入查看，搜索播放放到后续阶段。
+            推荐先使用已经验证可播放的 CatVod 源；如果更换源，保存后会直接替换当前点播源。
           </Text>
+        </View>
+
+        <View style={styles.settingsSectionLabelWrap}>
+          <Text style={styles.settingsSectionLabel}>本地解析器</Text>
+        </View>
+        <View style={styles.settingsGroup}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.sectionTitle}>本地解析器</Text>
+            <Text style={styles.sectionHint}>用于解析 CatVod 插件源的搜索和播放地址</Text>
+          </View>
           <TextInput
             autoCapitalize="none"
             autoCorrect={false}
@@ -2089,138 +2100,23 @@ export default function App() {
             </CompactButton>
           </View>
           {pluginServerHealth ? (
-            <Text
-              style={[
-                styles.helperText,
-                pluginServerHealth.ok ? styles.successText : styles.warningText,
-              ]}
-            >
-              {pluginServerHealth.message}
-            </Text>
+            <View style={styles.selectedSitePanel}>
+              <Text style={styles.statusLabel}>连接状态</Text>
+              <Text
+                selectable
+                style={[
+                  styles.selectedSiteText,
+                  pluginServerHealth.ok ? styles.successText : styles.warningText,
+                ]}
+              >
+                {pluginServerHealth.message}
+              </Text>
+            </View>
           ) : null}
-          <TextInput
-            autoCapitalize="none"
-            autoCorrect={false}
-            multiline
-            onChangeText={setConfigSourceText}
-            placeholder="也可以粘贴整段 OK影视/TVBox/魔力云播接口说明"
-            placeholderTextColor="#8d96a0"
-            style={[styles.input, styles.multilineInput]}
-            textAlignVertical="top"
-            value={configSourceText}
-          />
-          <View style={styles.buttonRow}>
-            <CompactButton
-              disabled={scanningConfigSources}
-              onPress={() =>
-                scanPastedConfigSources().catch(() =>
-                  setMessage('配置接口检测失败')
-                )
-              }
-              variant="primary"
-            >
-              {scanningConfigSources ? '检测中' : '检测配置接口'}
-            </CompactButton>
-            <CompactButton
-              disabled={scanningConfigSources}
-              onPress={() => {
-                setConfigSourceText('');
-                setConfigSourceScanResults([]);
-                setMessage('已清空配置接口检测内容');
-              }}
-              variant="plain"
-            >
-              清空
-            </CompactButton>
-          </View>
-          {configSourceScanResults.length ? (
-            <ConfigSourceScanResultPanel
-              onImport={(url) => {
-                setConfigUrl(url);
-                importConfigFromUrl(url).catch(() => setMessage('配置导入失败'));
-              }}
-              results={configSourceScanResults}
-            />
-          ) : null}
-          <ConfigDiagnosticsPanel diagnostics={configDiagnostics} />
-          <SourceList
-            onDeleteSource={requestDeleteSource}
-            onMakeDefault={makeSourceDefault}
-            onRenameSource={renameSource}
-            onVerifyPlugin={verifyPluginSource}
-            renamingSourceId={renamingSourceId}
-            renamingSourceText={renamingSourceText}
-            selectedSiteId={selectedSiteId}
-            setRenamingSourceId={setRenamingSourceId}
-            setRenamingSourceText={setRenamingSourceText}
-            sites={sites}
-            sources={configSources}
-            verifyingPlugin={verifyingPlugin}
-          />
         </View>
 
         <View style={styles.settingsSectionLabelWrap}>
-          <Text style={styles.settingsSectionLabel}>站点</Text>
-        </View>
-        <View style={styles.settingsGroup}>
-          <View style={styles.panelHeader}>
-            <Text style={styles.sectionTitle}>站点</Text>
-            <Text style={styles.sectionHint}>选择一个可搜索站点后回到发现页搜索</Text>
-          </View>
-          <View style={styles.selectedSitePanel}>
-            <Text style={styles.statusLabel}>当前站点</Text>
-            <Text style={styles.selectedSiteText}>
-              {selectedSite ? selectedSite.name : '未选择'}
-            </Text>
-          </View>
-          <TextInput
-            autoCorrect={false}
-            onChangeText={setSiteTestKeyword}
-            placeholder="测试关键词，例如 test"
-            placeholderTextColor="#8d96a0"
-            returnKeyType="done"
-            style={styles.input}
-            value={siteTestKeyword}
-          />
-          <CompactButton
-            disabled={!selectedSite || testingSite}
-            onPress={() =>
-              testSelectedSite().catch(() => setMessage('站点测试失败'))
-            }
-            variant="accent"
-          >
-            {testingSite ? '测试中' : '测试当前站点'}
-          </CompactButton>
-          <CompactButton
-            disabled={!selectedSite || verifyingPlugin}
-            onPress={() =>
-              verifySelectedPlugin().catch(() => setMessage('插件验证失败'))
-            }
-            variant="secondary"
-          >
-            {verifyingPlugin ? '验证中' : '验证插件适配'}
-          </CompactButton>
-          <CompactButton
-            disabled={!configDiagnostics.searchableSites || testingSites}
-            onPress={() =>
-              testAllSearchableSites().catch(() => setMessage('批量测试失败'))
-            }
-            variant="primary"
-          >
-            {testingSites ? '批量测试中' : '一键测试可搜索站点'}
-          </CompactButton>
-          {batchSiteTestResult ? (
-            <BatchSiteTestResultPanel batch={batchSiteTestResult} />
-          ) : null}
-          {siteTestResult ? <SiteTestResultPanel result={siteTestResult} /> : null}
-          {pluginVerifyResult ? (
-            <PluginVerifyResultPanel result={pluginVerifyResult} />
-          ) : null}
-          {renderSiteList()}
-        </View>
-
-        <View style={styles.settingsSectionLabelWrap}>
-          <Text style={styles.settingsSectionLabel}>数据</Text>
+          <Text style={styles.settingsSectionLabel}>隐私说明</Text>
         </View>
         <View style={styles.settingsGroup}>
           <View style={styles.panelHeader}>
