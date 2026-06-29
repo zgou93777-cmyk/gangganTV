@@ -137,6 +137,50 @@ test('server forwards CatVod sources and home requests to runner', async () => {
   });
 });
 
+test('server forwards CatVod category requests to runner', async () => {
+  const calls = [];
+  const server = createParserServer({
+    runner: {
+      async category(payload) {
+        calls.push(payload);
+        return { list: [{ vod_id: 'movie-1', vod_name: 'Movie Category' }] };
+      },
+    },
+  });
+
+  const response = await server.inject({
+    body: {
+      extend: {
+        area: '华语',
+        sort: 'T',
+      },
+      page: 2,
+      scriptUrl: 'https://cat.example.com/index.js',
+      siteBasePath: '/spider/one/3',
+      tid: 'movie',
+    },
+    method: 'POST',
+    path: '/catvod/category',
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(calls, [
+    {
+      extend: {
+        area: '华语',
+        sort: 'T',
+      },
+      page: 2,
+      scriptUrl: 'https://cat.example.com/index.js',
+      siteBasePath: '/spider/one/3',
+      tid: 'movie',
+    },
+  ]);
+  assert.deepEqual(response.json(), {
+    list: [{ vod_id: 'movie-1', vod_name: 'Movie Category' }],
+  });
+});
+
 test('server forwards CatVod detail and play requests to runner', async () => {
   const calls = [];
   const server = createParserServer({

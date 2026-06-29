@@ -8,6 +8,7 @@ const {
   DISCOVER_MODES,
   DISCOVER_REGION_FILTERS,
   DISCOVER_SORT_FILTERS,
+  buildDiscoverCategoryRequest,
   buildDiscoverPosterFeed,
   buildPosterDetailModel,
   buildVodResultCards,
@@ -55,6 +56,50 @@ test('defines MiraPlay discover categories and filters', () => {
   );
   assert.equal(DISCOVER_SORT_FILTERS[0].label, '排序');
   assert.equal(DISCOVER_REGION_FILTERS[1].label, '华语');
+});
+
+test('builds CatVod category requests from discover category and filters', () => {
+  assert.deepEqual(
+    buildDiscoverCategoryRequest({
+      feedTabId: 'movie',
+      regionFilterId: 'chinese',
+      sortFilterId: 'rating',
+    }),
+    {
+      extend: {
+        '地区': '华语',
+        sort: 'S',
+      },
+      tid: 'movie',
+    }
+  );
+  assert.deepEqual(
+    buildDiscoverCategoryRequest({
+      feedTabId: 'tv-hot',
+      regionFilterId: 'japan',
+      sortFilterId: 'latest',
+    }),
+    {
+      extend: {
+        type: 'tv_hot',
+      },
+      tid: 'tv_hot',
+    }
+  );
+  assert.deepEqual(
+    buildDiscoverCategoryRequest({
+      feedTabId: 'hot',
+      regionFilterId: 'western',
+      sortFilterId: 'latest',
+    }),
+    {
+      extend: {
+        area: '欧美',
+        sort: 'time',
+      },
+      tid: 'hot_gaia',
+    }
+  );
 });
 
 test('builds demo discover posters with stable card fields', () => {

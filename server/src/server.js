@@ -55,6 +55,15 @@ function createParserServer(options = {}) {
       siteBasePath: request.body?.siteBasePath,
     })
   ));
+  routes.set('POST /catvod/category', withAuth(token, async (request) =>
+    runner.category({
+      extend: request.body?.extend || {},
+      page: request.body?.page || 1,
+      scriptUrl: request.body?.scriptUrl,
+      siteBasePath: request.body?.siteBasePath,
+      tid: request.body?.tid || '',
+    })
+  ));
   routes.set('POST /catvod/detail', withAuth(token, async (request) =>
     runner.detail({
       id: request.body?.id,

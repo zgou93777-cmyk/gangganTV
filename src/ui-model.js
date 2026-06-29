@@ -36,22 +36,27 @@ const DISCOVER_FEED_TABS = [
   {
     id: 'hot',
     label: '热门内容',
+    typeId: 'hot_gaia',
   },
   {
     id: 'tv-hot',
     label: '热门电视',
+    typeId: 'tv_hot',
   },
   {
     id: 'variety-hot',
     label: '热门综艺',
+    typeId: 'show_hot',
   },
   {
     id: 'movie',
     label: '电影',
+    typeId: 'movie',
   },
   {
     id: 'tv',
     label: '电视',
+    typeId: 'tv',
   },
 ];
 
@@ -97,6 +102,26 @@ const DISCOVER_REGION_FILTERS = [
     label: '日本',
   },
 ];
+
+const HOT_SORT_VALUES = {
+  heat: 'recommend',
+  latest: 'time',
+  rating: 'rank',
+};
+
+const CATEGORY_SORT_VALUES = {
+  heat: 'T',
+  latest: 'R',
+  rating: 'S',
+};
+
+const REGION_VALUES = {
+  all: '',
+  chinese: '华语',
+  western: '欧美',
+  korea: '韩国',
+  japan: '日本',
+};
 
 const DEMO_DISCOVER_POSTERS = [
   {
@@ -196,6 +221,55 @@ function buildDiscoverPosterFeed() {
   return DEMO_DISCOVER_POSTERS.map((poster) => ({ ...poster }));
 }
 
+function buildDiscoverCategoryRequest({
+  feedTabId = 'hot',
+  regionFilterId = 'all',
+  sortFilterId = 'heat',
+} = {}) {
+  const feedTab =
+    DISCOVER_FEED_TABS.find((tab) => tab.id === feedTabId) || DISCOVER_FEED_TABS[0];
+  const tid = feedTab.typeId || 'hot_gaia';
+  const extend = {};
+
+  if (tid === 'tv_hot') {
+    extend.type = 'tv_hot';
+    return { extend, tid };
+  }
+
+  if (tid === 'show_hot') {
+    extend.type = 'show_hot';
+    return { extend, tid };
+  }
+
+  if (tid === 'hot_gaia') {
+    const sort = HOT_SORT_VALUES[sortFilterId];
+    const region = REGION_VALUES[regionFilterId];
+
+    if (sort) {
+      extend.sort = sort;
+    }
+
+    if (region) {
+      extend.area = region;
+    }
+
+    return { extend, tid };
+  }
+
+  const sort = CATEGORY_SORT_VALUES[sortFilterId];
+  const region = REGION_VALUES[regionFilterId];
+
+  if (sort) {
+    extend.sort = sort;
+  }
+
+  if (region) {
+    extend['地区'] = region;
+  }
+
+  return { extend, tid };
+}
+
 function buildSourceDiscoverPosterFeed(results = [], { sourceName = '' } = {}) {
   return (Array.isArray(results) ? results : [])
     .map((result, index) => {
@@ -284,6 +358,7 @@ module.exports = {
   DISCOVER_REGION_FILTERS,
   DISCOVER_SORT_FILTERS,
   buildDiscoverPosterFeed,
+  buildDiscoverCategoryRequest,
   buildPosterDetailModel,
   buildSourceDiscoverPosterFeed,
   buildVodResultCards,

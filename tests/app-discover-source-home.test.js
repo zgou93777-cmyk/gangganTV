@@ -12,8 +12,17 @@ test('discover page can render homepage posters from the selected source', () =>
 
 test('discover page loads CatVod plugin home from the selected child source', () => {
   assert.equal(appSource.includes('fetchPluginServerHome'), true);
+  assert.equal(appSource.includes('fetchPluginServerCategory'), true);
   assert.equal(appSource.includes('fetchPluginServerSources'), true);
   assert.equal(appSource.includes('siteBasePath: site?.siteBasePath ||'), true);
+});
+
+test('discover source feed reloads when category and filters change', () => {
+  assert.equal(
+    appSource.includes('[activeFeedTab, activePage, activeRegionFilter, activeSortFilter, activeTab, selectedSiteId, sites]'),
+    true
+  );
+  assert.equal(appSource.includes('buildDiscoverCategoryRequest({'), true);
 });
 
 test('CatVod plugin sources are expanded for incremental search targets', () => {

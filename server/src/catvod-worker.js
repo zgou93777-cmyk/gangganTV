@@ -215,6 +215,21 @@ async function callBundleHost(context, method, payload) {
     };
   }
 
+  if (method === 'category') {
+    const site = selectBundleSite(sites, payload?.siteBasePath);
+    const siteBasePath = normalizeSiteBasePath(site.api || '');
+    const value = await loadCategoryListWithFallback({
+      injectJson: (request) => app.inject(request),
+      payload,
+      siteBasePath,
+    });
+
+    return {
+      called: true,
+      value: wrapBundleResult('search', value, siteBasePath, site),
+    };
+  }
+
   const fallbackSiteBasePath = normalizeSiteBasePath(sites[0].api || '');
   const unwrappedPayload = unwrapBundlePayload(method, payload, fallbackSiteBasePath);
   const request = routeRequest(method, unwrappedPayload);
@@ -305,6 +320,21 @@ async function callBundleServerHost(context, method, payload) {
       site,
       siteBasePath,
       value,
+    });
+
+    return {
+      called: true,
+      value: wrapBundleResult('search', value, siteBasePath, site),
+    };
+  }
+
+  if (method === 'category') {
+    const site = selectBundleSite(sites, payload?.siteBasePath);
+    const siteBasePath = normalizeSiteBasePath(site.api || '');
+    const value = await loadCategoryListWithFallback({
+      injectJson: (request) => server.injectJson(request),
+      payload,
+      siteBasePath,
     });
 
     return {
@@ -540,6 +570,77 @@ async function loadCategoryHomeFallback({ injectJson, site, siteBasePath, value 
     source_api: siteBasePath,
     source_key: site?.key || '',
     source_name: site?.name || site?.key || siteBasePath,
+  };
+}
+
+async function loadCategoryListWithFallback({ injectJson, payload, siteBasePath }) {
+  let value = await injectJson({
+    ...routeRequest('category', payload),
+    path: `${siteBasePath}/category`,
+  });
+  const baseList = Array.isArray(value?.list) ? value.list : [];
+
+  if (baseList.length >= HOME_FALLBACK_LIMIT) {
+    return value;
+  }
+
+  const list = [...baseList];
+  const seenIds = new Set();
+
+  for (const item of list) {
+    const itemId = String(item?.vod_id || item?.id || item?.vod_name || '');
+
+    if (itemId) {
+      seenIds.add(itemId);
+    }
+  }
+
+  const startPage = Math.max(2, Number(payload?.page || 1) + 1);
+
+  for (let page = startPage; page <= HOME_FALLBACK_MAX_CATEGORY_PAGES; page += 1) {
+    let nextValue;
+
+    try {
+      nextValue = await injectJson({
+        ...routeRequest('category', {
+          ...payload,
+          page,
+        }),
+        path: `${siteBasePath}/category`,
+      });
+    } catch {
+      break;
+    }
+
+    const pageList = nextValue?.list || [];
+
+    if (!pageList.length) {
+      break;
+    }
+
+    for (const item of pageList) {
+      const itemId = String(item?.vod_id || item?.id || item?.vod_name || '');
+
+      if (!itemId || seenIds.has(itemId)) {
+        continue;
+      }
+
+      seenIds.add(itemId);
+      list.push(item);
+
+      if (list.length >= HOME_FALLBACK_LIMIT) {
+        break;
+      }
+    }
+
+    if (list.length >= HOME_FALLBACK_LIMIT) {
+      break;
+    }
+  }
+
+  return {
+    ...value,
+    list,
   };
 }
 

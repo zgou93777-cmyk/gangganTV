@@ -42,6 +42,11 @@ test('defines an outline-only active tab surface', () => {
   assert.match(GLASS_ACTIVE_OUTLINE_STYLE.borderColor, /rgba\(255, 255, 255, 0\.\d+\)/);
 });
 
+test('bottom nav glass is readable over posters', () => {
+  assert.equal(GLASS_NAV_STYLE.backgroundColor, 'rgba(255, 255, 255, 0.58)');
+  assert.equal(GLASS_NAV_STYLE.borderColor, 'rgba(255, 255, 255, 0.72)');
+});
+
 test('App applies glass theme to the primary MiraPlay controls', () => {
   const appSource = fs.readFileSync(path.join(__dirname, '..', 'App.js'), 'utf8');
 
@@ -57,6 +62,18 @@ test('App applies glass theme to the primary MiraPlay controls', () => {
   ].forEach((needle) => {
     assert.equal(appSource.includes(needle), true, `App.js should include ${needle}`);
   });
+});
+
+test('source selector stays compact and does not render source counts', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, '..', 'App.js'), 'utf8');
+  const selectorStart = appSource.indexOf('function renderSourceSelector()');
+  const selectorEnd = appSource.indexOf('function renderDiscoverFeedRail()', selectorStart);
+  const selectorSource = appSource.slice(selectorStart, selectorEnd);
+
+  assert.equal(selectorSource.includes('sourceMeta'), false);
+  assert.equal(selectorSource.includes('个源'), false);
+  assert.equal(selectorSource.includes('本机源'), false);
+  assert.equal(appSource.includes("alignSelf: 'flex-start'"), true);
 });
 
 test('App applies MiraPlay page shells beyond the discover screen', () => {

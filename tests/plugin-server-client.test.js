@@ -3,6 +3,7 @@ const test = require('node:test');
 
 const {
   fetchPluginServerHealth,
+  fetchPluginServerCategory,
   fetchPluginServerDetail,
   fetchPluginServerHome,
   fetchPluginServerPlay,
@@ -113,6 +114,44 @@ test('fetchPluginServerSources and home expose CatVod bundle source metadata', a
   ]);
   assert.deepEqual(home, [
     { id: 'home-1', name: '首页影片', poster: '', remarks: '' },
+  ]);
+});
+
+test('fetchPluginServerCategory posts selected category and filter values', async () => {
+  const results = await fetchPluginServerCategory(
+    {
+      baseUrl: 'https://parser.example.com',
+      scriptUrl: 'https://cat.example.com/index.js',
+      siteBasePath: '/spider/douban/3',
+    },
+    {
+      extend: {
+        area: '华语',
+        sort: 'T',
+      },
+      page: 2,
+      tid: 'movie',
+    },
+    async (url, options) => {
+      assert.equal(url, 'https://parser.example.com/catvod/category');
+      assert.deepEqual(JSON.parse(options.body), {
+        extend: {
+          area: '华语',
+          sort: 'T',
+        },
+        page: 2,
+        scriptUrl: 'https://cat.example.com/index.js',
+        siteBasePath: '/spider/douban/3',
+        tid: 'movie',
+      });
+      return jsonResponse({
+        list: [{ vod_id: 'movie-1', vod_name: 'Movie One' }],
+      });
+    }
+  );
+
+  assert.deepEqual(results, [
+    { id: 'movie-1', name: 'Movie One', poster: '', remarks: '' },
   ]);
 });
 

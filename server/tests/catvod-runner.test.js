@@ -849,6 +849,82 @@ test('CatVodRunner loads bundle home lists from the selected source', async () =
   assert.match(home.list[0].vod_id, /^catvod:/);
 });
 
+test('CatVodRunner loads bundle category lists from the selected source', async () => {
+  const runner = new CatVodRunner({
+    fetchText: async () => `
+      module.exports = {
+        async start() {
+          const server = catServerFactory(async (request, response) => {
+            const chunks = [];
+            request.on('data', (chunk) => chunks.push(chunk));
+            request.on('end', () => {
+              const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {};
+              response.setHeader('content-type', 'application/json');
+              if (request.url === '/config') {
+                response.end(JSON.stringify({
+                  video: {
+                    sites: [{ key: 'nodejs_home', name: '首页源', api: '/spider/home/3' }]
+                  }
+                }));
+                return;
+              }
+              if (request.url === '/spider/home/3/category') {
+                response.end(JSON.stringify({
+                  list: body.page === 1
+                    ? [{
+                      vod_id: body.tid + '-' + body.extend.sort,
+                      vod_name: body.tid + ' ' + body.extend.area,
+                    }]
+                    : [
+                      {
+                        vod_id: body.tid + '-page' + body.page + '-1',
+                        vod_name: body.tid + ' page ' + body.page + ' one',
+                      },
+                      {
+                        vod_id: body.tid + '-page' + body.page + '-2',
+                        vod_name: body.tid + ' page ' + body.page + ' two',
+                      }
+                    ]
+                }));
+                return;
+              }
+              response.statusCode = 404;
+              response.end(JSON.stringify({ error: 'not found' }));
+            });
+          });
+          server.listen({ port: 9988 }, () => {});
+        }
+      };
+    `,
+    timeoutMs: 3000,
+  });
+
+  const category = await runner.category({
+    extend: {
+      area: '华语',
+      sort: 'T',
+    },
+    page: 1,
+    scriptUrl: 'https://cat.example.com/index.js',
+    siteBasePath: '/spider/home/3',
+    tid: 'movie',
+  });
+
+  assert.equal(category.list[0].vod_name, 'movie 华语');
+  assert.deepEqual(
+    category.list.map((item) => item.vod_name),
+    [
+      'movie 华语',
+      'movie page 2 one',
+      'movie page 2 two',
+      'movie page 3 one',
+      'movie page 3 two',
+    ]
+  );
+  assert.equal(category.list[0].source_name, '首页源');
+  assert.match(category.list[0].vod_id, /^catvod:/);
+});
+
 test('CatVodRunner reports bundle route parser failures as incompatible source errors', async () => {
   const runner = new CatVodRunner({
     fetchText: async () => `

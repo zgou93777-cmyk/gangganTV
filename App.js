@@ -39,6 +39,7 @@ const {
   DISCOVER_FEED_TABS,
   DISCOVER_REGION_FILTERS,
   DISCOVER_SORT_FILTERS,
+  buildDiscoverCategoryRequest,
   buildDiscoverPosterFeed,
   buildPosterDetailModel,
   buildSourceDiscoverPosterFeed,
@@ -75,6 +76,7 @@ const {
 } = require('./src/catvod-runtime');
 const {
   fetchPluginServerHealth,
+  fetchPluginServerCategory,
   fetchPluginServerDetail,
   fetchPluginServerHome,
   fetchPluginServerPlay,
@@ -299,7 +301,7 @@ export default function App() {
     loadSourceDiscoverFeed().catch(() => {
       setSourceDiscoverResults([]);
     });
-  }, [activePage, activeTab, selectedSiteId, sites]);
+  }, [activeFeedTab, activePage, activeRegionFilter, activeSortFilter, activeTab, selectedSiteId, sites]);
 
   useEffect(() => {
     if (error?.message) {
@@ -1415,11 +1417,28 @@ export default function App() {
 
     try {
       const results = isPluginServerSite(selectedSite)
-        ? await fetchPluginServerHome(buildPluginServerConfig(selectedSite))
+        ? await fetchPluginServerCategory(
+            buildPluginServerConfig(selectedSite),
+            {
+              ...buildDiscoverCategoryRequest({
+                feedTabId: activeFeedTab,
+                regionFilterId: activeRegionFilter,
+                sortFilterId: activeSortFilter,
+              }),
+              page: 1,
+            }
+          )
         : await fetchTvBoxHome(selectedSite);
       setSourceDiscoverResults(results.slice(0, 30));
     } catch {
-      setSourceDiscoverResults([]);
+      try {
+        const fallbackResults = isPluginServerSite(selectedSite)
+          ? await fetchPluginServerHome(buildPluginServerConfig(selectedSite))
+          : [];
+        setSourceDiscoverResults(fallbackResults.slice(0, 30));
+      } catch {
+        setSourceDiscoverResults([]);
+      }
     } finally {
       setLoadingDiscoverFeed(false);
     }
@@ -1733,9 +1752,6 @@ export default function App() {
           />
           <Text numberOfLines={1} style={styles.brandText}>
             {label}
-          </Text>
-          <Text numberOfLines={1} style={styles.sourceMeta}>
-            {sites.length ? `${sites.length} 个源` : '本机源'}
           </Text>
         </Pressable>
         {menuVisible ? (
@@ -4009,18 +4025,20 @@ const styles = StyleSheet.create({
     zIndex: 40,
   },
   sourceSelectorWrap: {
-    flex: 1,
+    alignSelf: 'flex-start',
     position: 'relative',
     zIndex: 50,
   },
   sourcePill: {
     ...GLASS_BUTTON_STYLE,
     alignItems: 'center',
-    borderRadius: 21,
+    alignSelf: 'flex-start',
+    borderRadius: 19,
     flexDirection: 'row',
-    gap: 6,
-    minHeight: 40,
-    paddingHorizontal: 12,
+    gap: 7,
+    maxWidth: 240,
+    minHeight: 36,
+    paddingHorizontal: 11,
   },
   sourceIcon: {
     color: COLORS.blue,
@@ -4030,15 +4048,9 @@ const styles = StyleSheet.create({
   },
   brandText: {
     color: COLORS.ink,
+    flexShrink: 1,
     fontSize: 15,
     fontWeight: '800',
-    letterSpacing: 0,
-  },
-  sourceMeta: {
-    color: COLORS.muted,
-    flexShrink: 1,
-    fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 0,
   },
   sourceMenu: {

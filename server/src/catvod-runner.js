@@ -27,6 +27,10 @@ class CatVodRunner {
     return this.call('home', payload);
   }
 
+  async category(payload) {
+    return this.call('category', payload);
+  }
+
   async detail(payload) {
     return this.call('detail', payload);
   }
