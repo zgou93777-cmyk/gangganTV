@@ -136,3 +136,60 @@ test('searchAcrossSites records skipped runtime sources without calling them', a
     },
   ]);
 });
+
+test('searchAcrossSites reports each source as soon as it finishes', async () => {
+  let releaseSlowSearch;
+  const slowSearch = new Promise((resolve) => {
+    releaseSlowSearch = () => resolve([{ id: 'slow-1', name: 'Slow Result' }]);
+  });
+  const progressEvents = [];
+  let searchFinished = false;
+
+  const searchPromise = searchAcrossSites({
+    keyword: 'test',
+    onProgress: (event) => progressEvents.push(event),
+    searchSite: async (site) => {
+      if (site.id === 'slow') {
+        return slowSearch;
+      }
+
+      return [{ id: 'fast-1', name: 'Fast Result' }];
+    },
+    sites: [
+      { id: 'slow', name: 'Slow Site', searchable: true },
+      { id: 'fast', name: 'Fast Site', searchable: true },
+    ],
+  }).then((result) => {
+    searchFinished = true;
+    return result;
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(searchFinished, false);
+  assert.equal(progressEvents.length, 1);
+  assert.equal(progressEvents[0].type, 'results');
+  assert.equal(progressEvents[0].site.id, 'fast');
+  assert.deepEqual(progressEvents[0].results, [
+    {
+      id: 'fast-1',
+      name: 'Fast Result',
+      runtimeSiteId: 'fast',
+      runtimeSiteName: 'Fast Site',
+      sourceId: 'fast',
+      sourceName: 'Fast Site',
+    },
+  ]);
+  assert.equal(progressEvents[0].completedCount, 1);
+  assert.equal(progressEvents[0].targetCount, 2);
+
+  releaseSlowSearch();
+  const result = await searchPromise;
+
+  assert.equal(progressEvents.length, 2);
+  assert.equal(progressEvents[1].site.id, 'slow');
+  assert.deepEqual(
+    result.results.map((item) => item.id),
+    ['fast-1', 'slow-1']
+  );
+});

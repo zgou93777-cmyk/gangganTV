@@ -1061,6 +1061,7 @@ export default function App() {
     setLoadingSearch(true);
     setActiveType('config');
     setMessage(buildSearchLoadingMessage({ targetCount: targets.length }));
+    setSearchResults([]);
     setSearchFailures([]);
     setActiveSearchBucketId('all');
     const nextSearchHistory = addSearchHistoryKeyword(searchHistory, cleanKeyword);
@@ -1070,9 +1071,31 @@ export default function App() {
     );
 
     try {
+      const progressResults = [];
+      const progressFailures = [];
       const { failures, results, targets: searchedTargets } = await searchAcrossSites({
         getSkipReason: getSearchSkipReason,
         keyword: cleanKeyword,
+        onProgress: (event) => {
+          if (event.type === 'results') {
+            progressResults.push(...(event.results || []));
+            setSearchResults([...progressResults]);
+          }
+
+          if (event.type === 'failure' && event.failure) {
+            progressFailures.push(event.failure);
+            setSearchFailures([...progressFailures]);
+          }
+
+          setMessage(
+            buildSearchProgressMessage({
+              completedCount: event.completedCount,
+              failureCount: progressFailures.length,
+              resultCount: progressResults.length,
+              targetCount: event.targetCount,
+            })
+          );
+        },
         selectedSourceIds: selectedSearchSourceIds,
         sites,
         searchSite,
@@ -2348,18 +2371,20 @@ export default function App() {
           <ScrollView
             contentContainerStyle={styles.searchPageResults}
             showsVerticalScrollIndicator={false}
+            style={styles.searchResultPane}
           >
             {loadingSearch ? (
               <View style={styles.loadingStatePanel}>
                 <ActivityIndicator color="#2f80ed" />
                 <Text style={styles.loadingStateTitle}>正在搜索真实来源</Text>
                 <Text selectable style={styles.loadingStateText}>
-                  {buildSearchLoadingMessage({ targetCount: activeSearchTargetCount })}
+                  {message || buildSearchLoadingMessage({ targetCount: activeSearchTargetCount })}
                 </Text>
               </View>
-            ) : searchResults.length || searchFailures.length ? (
+            ) : null}
+            {searchResults.length || searchFailures.length ? (
               <>
-                {renderVodResultGrid(vodResultCards)}
+                {searchResults.length ? renderVodResultGrid(vodResultCards) : null}
                 {searchFailures.length ? (
                   <View style={styles.searchFailurePanel}>
                     <Text style={styles.searchFailureTitle}>失败来源</Text>
@@ -2380,12 +2405,14 @@ export default function App() {
                 ) : null}
               </>
             ) : (
-              <View style={styles.searchEmptyState}>
-                <Text style={styles.sectionTitle}>输入关键词开始搜索</Text>
-                <Text style={styles.sectionHint}>
-                  默认搜索全部可用来源，可在右上角筛选配置源。
-                </Text>
-              </View>
+              !loadingSearch ? (
+                <View style={styles.searchEmptyState}>
+                  <Text style={styles.sectionTitle}>输入关键词开始搜索</Text>
+                  <Text style={styles.sectionHint}>
+                    默认搜索全部可用来源，可在右上角筛选配置源。
+                  </Text>
+                </View>
+              ) : null
             )}
           </ScrollView>
         </View>
@@ -3682,6 +3709,27 @@ function buildSearchMessage({ failureCount = 0, resultCount = 0, targetCount = 0
   return '没有搜索结果';
 }
 
+function buildSearchProgressMessage({
+  completedCount = 0,
+  failureCount = 0,
+  resultCount = 0,
+  targetCount = 0,
+} = {}) {
+  if (!targetCount) {
+    return '正在搜索真实来源';
+  }
+
+  if (resultCount > 0) {
+    return `已返回 ${resultCount} 个结果，正在搜索 ${completedCount}/${targetCount} 个来源`;
+  }
+
+  if (failureCount > 0) {
+    return `已有 ${failureCount} 个来源暂不可用，正在搜索 ${completedCount}/${targetCount} 个来源`;
+  }
+
+  return `正在搜索 ${completedCount}/${targetCount} 个来源`;
+}
+
 function sourceNameFromUrl(value, fallback) {
   try {
     return new URL(value).hostname || fallback;
@@ -4374,12 +4422,13 @@ const styles = StyleSheet.create({
   },
   loadingStatePanel: {
     ...GLASS_PANEL_STYLE,
-    alignItems: 'center',
+    alignItems: 'flex-start',
     borderRadius: 20,
-    gap: 10,
+    gap: 7,
     justifyContent: 'center',
-    minHeight: 180,
-    padding: 20,
+    marginBottom: 14,
+    minHeight: 88,
+    padding: 14,
     width: '100%',
   },
   loadingStateTitle: {
@@ -4393,7 +4442,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 0,
     lineHeight: 19,
-    textAlign: 'center',
   },
   buttonRow: {
     flexDirection: 'row',
@@ -4774,14 +4822,15 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flex: 1,
     flexDirection: 'row',
-    gap: 9,
+    gap: 8,
   },
   searchPageRail: {
-    width: 118,
+    width: 104,
   },
   searchPageResults: {
     flexGrow: 1,
     paddingBottom: 40,
+    width: '100%',
   },
   searchEmptyState: {
     ...GLASS_PANEL_STYLE,
@@ -4823,7 +4872,7 @@ const styles = StyleSheet.create({
   },
   searchRail: {
     maxHeight: 560,
-    width: 116,
+    width: 104,
   },
   searchRailContent: {
     gap: 8,
@@ -5381,11 +5430,13 @@ const styles = StyleSheet.create({
   vodGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 11,
+    justifyContent: 'space-between',
+    rowGap: 14,
+    width: '100%',
   },
   vodCard: {
     gap: 7,
-    width: '31.4%',
+    width: '48.2%',
   },
   vodCardActive: {
     opacity: 0.82,

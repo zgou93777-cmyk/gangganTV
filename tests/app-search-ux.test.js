@@ -29,3 +29,9 @@ test('search entry points guard against repeated submissions while loading', () 
   assert.equal(appSource.includes('editable={!loadingSearch}'), true);
   assert.equal(appSource.includes('disabled={loadingSearch}'), true);
 });
+
+test('search results page renders incremental progress without hiding returned posters', () => {
+  assert.equal(appSource.includes('onProgress: (event) => {'), true);
+  assert.equal(appSource.includes('buildSearchProgressMessage'), true);
+  assert.equal(appSource.includes("searchResults.length ? renderVodResultGrid(vodResultCards) : null"), true);
+});
