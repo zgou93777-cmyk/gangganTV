@@ -84,6 +84,9 @@ const {
   filterResultsByBucket,
 } = require('./src/search-buckets');
 const {
+  resolveResultRuntimeSite,
+} = require('./src/search-result-runtime');
+const {
   searchAcrossSites,
 } = require('./src/search-workflow');
 
@@ -887,9 +890,11 @@ export default function App() {
   }
 
   async function loadDetail(result) {
-    const resultSite = result?.sourceId
-      ? sites.find((site) => site.id === result.sourceId)
-      : selectedSite;
+    const resultSite = resolveResultRuntimeSite({
+      result,
+      selectedSite,
+      sites,
+    });
 
     if (!resultSite) {
       setMessage('请先选择站点');
@@ -897,7 +902,11 @@ export default function App() {
     }
 
     setSelectedSiteId(resultSite.id);
-    setSelectedResult(result);
+    setSelectedResult({
+      ...result,
+      runtimeSiteId: result.runtimeSiteId || resultSite.id,
+      runtimeSiteName: result.runtimeSiteName || resultSite.name,
+    });
     setSelectedDetail(null);
     setActivePage('detail');
     setLoadingDetailId(result.id);
@@ -932,7 +941,13 @@ export default function App() {
   }
 
   async function playEpisode(group, episode, episodeIndex) {
-    if (!selectedSite || !selectedDetail) {
+    const playbackSite = resolveResultRuntimeSite({
+      result: selectedResult,
+      selectedSite,
+      sites,
+    });
+
+    if (!playbackSite || !selectedDetail) {
       setMessage('请先选择播放项');
       return;
     }
@@ -942,17 +957,17 @@ export default function App() {
     setMessage('正在解析播放地址');
 
     try {
-      const playableUrl = isTvBoxSpiderSite(selectedSite)
-        ? await fetchTvBoxServerPlay(buildTvBoxServerConfig(selectedSite), {
+      const playableUrl = isTvBoxSpiderSite(playbackSite)
+        ? await fetchTvBoxServerPlay(buildTvBoxServerConfig(playbackSite), {
             flag: group.name,
             id: episode.url,
           })
-        : isPluginServerSite(selectedSite)
-        ? await fetchPluginServerPlay(buildPluginServerConfig(selectedSite), {
+        : isPluginServerSite(playbackSite)
+        ? await fetchPluginServerPlay(buildPluginServerConfig(playbackSite), {
             flag: group.name,
             id: episode.url,
           })
-        : isCatVodRuntimeActive(selectedSite)
+        : isCatVodRuntimeActive(playbackSite)
         ? normalizeCatVodPlayResult(
             await catVodRuntimeRef.current.call('play', [
               group.name,
@@ -960,13 +975,15 @@ export default function App() {
               [],
             ])
           ) || episode.url
-        : await resolveTvBoxEpisode(selectedSite, episode);
+        : await resolveTvBoxEpisode(playbackSite, episode);
       await playResolvedUrl(
         'vod',
         playableUrl,
         `${selectedDetail.name} ${episode.name}`,
         {
-          sourceName: selectedSite.name,
+          sourceName:
+            selectedResult?.sourceName ||
+            playbackSite.name,
         }
       );
     } catch (episodeError) {

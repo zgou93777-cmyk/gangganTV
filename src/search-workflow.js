@@ -82,6 +82,8 @@ async function searchAcrossSites({
 function normalizeResultSources(results = [], site = {}) {
   return (Array.isArray(results) ? results : []).map((result) => ({
     ...result,
+    runtimeSiteId: result?.runtimeSiteId || site.id,
+    runtimeSiteName: result?.runtimeSiteName || site.name || site.id,
     sourceId: result?.sourceId || site.id,
     sourceName: result?.sourceName || site.name || site.id,
   }));

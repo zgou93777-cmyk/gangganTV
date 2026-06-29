@@ -54,6 +54,8 @@ test('searchAcrossSites tags results with their source and keeps per-source fail
     {
       id: 'movie-1',
       name: '疯迷',
+      runtimeSiteId: 'cat',
+      runtimeSiteName: 'CatVod',
       sourceId: 'cat',
       sourceName: 'CatVod',
     },
@@ -63,6 +65,39 @@ test('searchAcrossSites tags results with their source and keeps per-source fail
       sourceId: 'jar',
       sourceName: 'Spider',
       message: 'TVBox Spider 未连接',
+    },
+  ]);
+});
+
+test('searchAcrossSites preserves CatVod child source while tracking parent runtime site', async () => {
+  const result = await searchAcrossSites({
+    keyword: '痴迷',
+    searchSite: async () => [
+      {
+        id: 'catvod-result-1',
+        name: '痴迷TC',
+        sourceId: 'nodejs_guazi',
+        sourceName: '🌺瓜子|秒播🌺',
+      },
+    ],
+    sites: [
+      {
+        id: 'catvod-server-runtime',
+        name: 'cat.999888987.xyz',
+        runtime: 'catvod-server',
+        searchable: true,
+      },
+    ],
+  });
+
+  assert.deepEqual(result.results, [
+    {
+      id: 'catvod-result-1',
+      name: '痴迷TC',
+      runtimeSiteId: 'catvod-server-runtime',
+      runtimeSiteName: 'cat.999888987.xyz',
+      sourceId: 'nodejs_guazi',
+      sourceName: '🌺瓜子|秒播🌺',
     },
   ]);
 });
