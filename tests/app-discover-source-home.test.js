@@ -10,6 +10,18 @@ test('discover page can render homepage posters from the selected source', () =>
   assert.equal(appSource.includes('loadSourceDiscoverFeed'), true);
 });
 
+test('discover page loads CatVod plugin home from the selected child source', () => {
+  assert.equal(appSource.includes('fetchPluginServerHome'), true);
+  assert.equal(appSource.includes('fetchPluginServerSources'), true);
+  assert.equal(appSource.includes('siteBasePath: site?.siteBasePath ||'), true);
+});
+
+test('CatVod plugin sources are expanded for incremental search targets', () => {
+  assert.equal(appSource.includes('name: childName || fallbackName'), true);
+  assert.equal(appSource.includes('setSelectedSearchSourceIds(serverSites.map'), true);
+  assert.equal(appSource.includes('await expandPluginServerSources(catVodSource, scriptUrl)'), true);
+});
+
 test('main shell uses compact top padding instead of the full safe area spacer', () => {
   const stylesStart = appSource.indexOf('scrollContent: {');
   const stylesEnd = appSource.indexOf('header: {', stylesStart);

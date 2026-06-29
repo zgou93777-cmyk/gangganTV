@@ -76,8 +76,10 @@ const {
 const {
   fetchPluginServerHealth,
   fetchPluginServerDetail,
+  fetchPluginServerHome,
   fetchPluginServerPlay,
   fetchPluginServerSearch,
+  fetchPluginServerSources,
 } = require('./src/plugin-server-client');
 const {
   fetchTvBoxServerDetail,
@@ -593,7 +595,7 @@ export default function App() {
           saveJson(STORAGE_KEYS.sites, nextState.sites),
           AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, nextState.selectedSiteId),
         ]);
-        loadPluginServerSite(pluginSource, cleanUrl);
+        await expandPluginServerSources(pluginSource, cleanUrl, []);
         setMessage(
           pluginServerUrl.trim()
             ? '已导入 CatVod 插件源，将使用本地解析器搜索'
@@ -864,7 +866,7 @@ export default function App() {
 
       setPluginVerifyResult(result);
       if (result.scriptUrl && pluginServerUrl.trim()) {
-        loadPluginServerSite(source, result.scriptUrl);
+        await expandPluginServerSources(source, result.scriptUrl);
       } else if (
         result.scriptText &&
         (result.sandboxPreflight?.ok ||
@@ -875,7 +877,7 @@ export default function App() {
         result.scriptUrl &&
         result.sandboxPreflight?.compatibility?.status === 'server-runtime-required'
       ) {
-        loadPluginServerSite(source, result.scriptUrl);
+        await expandPluginServerSources(source, result.scriptUrl);
       }
       setMessage(result.message);
     } catch (verifyError) {
@@ -919,11 +921,16 @@ export default function App() {
     setMessage('正在加载插件执行器');
   }
 
-  function buildPluginServerSite(source, scriptUrl) {
+  function buildPluginServerSite(source, scriptUrl, childSource = null) {
+    const childApi = childSource?.api || '';
+    const childKey = childSource?.key || childApi;
+    const childName = childSource?.name || childSource?.key || '';
+    const fallbackName = `${source.name || 'CatVod'} 服务端插件`;
+
     return {
-      id: 'catvod-server-runtime',
-      siteKey: 'catvod-server-runtime',
-      name: `${source.name || 'CatVod'} 服务端插件`,
+      id: childKey ? `catvod-server-${childKey}` : 'catvod-server-runtime',
+      siteKey: childKey || 'catvod-server-runtime',
+      name: childName || fallbackName,
       type: 3,
       api: scriptUrl,
       searchable: true,
@@ -931,6 +938,7 @@ export default function App() {
       sourceId: source.id,
       sourceName: source.name || '插件源',
       runtime: 'catvod-server',
+      siteBasePath: childApi,
       scriptUrl,
     };
   }
@@ -957,6 +965,50 @@ export default function App() {
         ? '已准备使用本地解析器'
         : '该插件需要本地解析器，请先填写本地解析器地址'
     );
+  }
+
+  async function expandPluginServerSources(source, scriptUrl, baseSites = sites) {
+    if (!pluginServerUrl.trim()) {
+      loadPluginServerSite(source, scriptUrl);
+      return;
+    }
+
+    try {
+      const childSources = await fetchPluginServerSources({
+        baseUrl: pluginServerUrl.trim(),
+        token: pluginServerToken.trim(),
+        scriptUrl,
+      });
+      const serverSites = childSources.length
+        ? childSources.map((childSource) =>
+            buildPluginServerSite(source, scriptUrl, childSource)
+          )
+        : [buildPluginServerSite(source, scriptUrl)];
+      const nextSites = [
+        ...baseSites.filter((site) => site?.runtime !== 'catvod-server'),
+        ...serverSites,
+      ];
+      const firstSite = serverSites[0];
+
+      setCatVodSource({
+        ...source,
+        scriptUrl,
+      });
+      setSites(nextSites);
+      setSelectedSiteId(firstSite.id);
+      setSelectedSearchSourceIds(serverSites.map((site) => site.id));
+      setActiveTab('discover');
+      saveJson(STORAGE_KEYS.sites, nextSites).catch(() =>
+        setMessage('本地解析器站点保存失败')
+      );
+      AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, firstSite.id).catch(() =>
+        setMessage('默认站点保存失败')
+      );
+      setMessage(`已加载 ${serverSites.length} 个插件内部来源`);
+    } catch (sourceError) {
+      setMessage(sourceError?.message || '插件内部来源读取失败，已保留总源');
+      loadPluginServerSite(source, scriptUrl);
+    }
   }
 
   async function savePluginServerUrl() {
@@ -1020,6 +1072,12 @@ export default function App() {
           ? `本地解析服务正常：${capabilityText}`
           : '服务返回异常状态',
       });
+      if (ok && catVodSource?.url) {
+        const scriptUrl = catVodSource.scriptUrl || catVodSource.url;
+        await expandPluginServerSources(catVodSource, scriptUrl);
+        return;
+      }
+
       setMessage(ok ? '本地解析服务连接正常' : '本地解析服务返回异常状态');
     } catch (healthError) {
       const errorMessage = healthError?.message || '本地解析器检测失败';
@@ -1331,7 +1389,7 @@ export default function App() {
   }
 
   async function loadSourceDiscoverFeed() {
-    if (!selectedSite || isTvBoxSpiderSite(selectedSite) || isPluginServerSite(selectedSite)) {
+    if (!selectedSite || isTvBoxSpiderSite(selectedSite)) {
       setSourceDiscoverResults([]);
       return;
     }
@@ -1339,7 +1397,9 @@ export default function App() {
     setLoadingDiscoverFeed(true);
 
     try {
-      const results = await fetchTvBoxHome(selectedSite);
+      const results = isPluginServerSite(selectedSite)
+        ? await fetchPluginServerHome(buildPluginServerConfig(selectedSite))
+        : await fetchTvBoxHome(selectedSite);
       setSourceDiscoverResults(results.slice(0, 30));
     } catch {
       setSourceDiscoverResults([]);
@@ -1369,6 +1429,7 @@ export default function App() {
     return {
       baseUrl: pluginServerUrl.trim(),
       token: pluginServerToken.trim(),
+      siteBasePath: site?.siteBasePath || '',
       scriptUrl: firstValidHttpUrl([site?.scriptUrl, site?.sourceId, site?.api]),
     };
   }

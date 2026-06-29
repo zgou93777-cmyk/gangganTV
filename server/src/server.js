@@ -38,7 +38,19 @@ function createParserServer(options = {}) {
   routes.set('POST /catvod/search', withAuth(token, async (request) =>
     runner.search({
       keyword: String(request.body?.keyword || request.body?.wd || '').trim(),
+      ...(request.body?.siteBasePath ? { siteBasePath: request.body.siteBasePath } : {}),
       scriptUrl: request.body?.scriptUrl,
+    })
+  ));
+  routes.set('POST /catvod/sources', withAuth(token, async (request) =>
+    runner.sources({
+      scriptUrl: request.body?.scriptUrl,
+    })
+  ));
+  routes.set('POST /catvod/home', withAuth(token, async (request) =>
+    runner.home({
+      scriptUrl: request.body?.scriptUrl,
+      siteBasePath: request.body?.siteBasePath,
     })
   ));
   routes.set('POST /catvod/detail', withAuth(token, async (request) =>

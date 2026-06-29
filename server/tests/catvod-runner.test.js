@@ -271,6 +271,70 @@ test('CatVodRunner calls bundle-style start plugins through host routes', async 
   assert.equal(play.url, 'https://media.example.com/bundle-token.m3u8');
 });
 
+test('CatVodRunner exposes createCatApp bundle sources and searches one selected source', async () => {
+  const runner = new CatVodRunner({
+    fetchText: async () => `
+      module.exports = {
+        async start(config) {
+          const app = createCatApp({ config });
+          app.register(async (server) => {
+            server.register(async (spider) => {
+              spider.post('/search', async (request) => ({
+                list: [{ vod_id: 'one-' + request.body.wd, vod_name: request.body.wd + ' A' }]
+              }));
+              spider.post('/home', async () => ({
+                list: [{ vod_id: 'home-one', vod_name: 'Home One' }]
+              }));
+            }, { prefix: '/spider/one/3' });
+            server.register(async (spider) => {
+              spider.post('/search', async (request) => ({
+                list: [{ vod_id: 'two-' + request.body.wd, vod_name: request.body.wd + ' B' }]
+              }));
+              spider.post('/home', async () => ({
+                list: [{ vod_id: 'home-two', vod_name: 'Home Two' }]
+              }));
+            }, { prefix: '/spider/two/3' });
+            server.get('/config', async () => ({
+              video: {
+                sites: [
+                  { key: 'nodejs_one', name: 'One Source', api: '/spider/one/3' },
+                  { key: 'nodejs_two', name: 'Two Source', api: '/spider/two/3' }
+                ]
+              }
+            }));
+          });
+          await app.ready();
+          globalThis.__catvodApp = app;
+        }
+      };
+    `,
+    timeoutMs: 3000,
+  });
+
+  const sources = await runner.sources({
+    scriptUrl: 'https://cat.example.com/index.js',
+  });
+  const search = await runner.search({
+    keyword: 'movie',
+    scriptUrl: 'https://cat.example.com/index.js',
+    siteBasePath: '/spider/two/3',
+  });
+  const home = await runner.home({
+    scriptUrl: 'https://cat.example.com/index.js',
+    siteBasePath: '/spider/two/3',
+  });
+
+  assert.deepEqual(sources.sites, [
+    { key: 'nodejs_one', name: 'One Source', api: '/spider/one/3' },
+    { key: 'nodejs_two', name: 'Two Source', api: '/spider/two/3' },
+  ]);
+  assert.equal(search.list.length, 1);
+  assert.equal(search.list[0].source_name, 'Two Source');
+  assert.equal(search.list[0].vod_name, 'movie B');
+  assert.equal(home.list[0].source_name, 'Two Source');
+  assert.equal(home.list[0].vod_name, 'Home Two');
+});
+
 test('CatVodRunner gives start plugins an in-memory host instead of opening a port', async () => {
   const runner = new CatVodRunner({
     fetchText: async () => `
@@ -514,6 +578,110 @@ test('CatVodRunner aggregates bundle search results from all matching video site
   );
   assert.match(search.list[0].vod_id, /^catvod:/);
   assert.match(search.list[1].vod_id, /^catvod:/);
+});
+
+test('CatVodRunner exposes bundle video sources and searches one selected source', async () => {
+  const runner = new CatVodRunner({
+    fetchText: async () => `
+      module.exports = {
+        async start() {
+          const server = catServerFactory(async (request, response) => {
+            const chunks = [];
+            request.on('data', (chunk) => chunks.push(chunk));
+            request.on('end', () => {
+              const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {};
+              response.setHeader('content-type', 'application/json');
+              if (request.url === '/config') {
+                response.end(JSON.stringify({
+                  video: {
+                    sites: [
+                      { key: 'nodejs_one', name: '一号源', api: '/spider/one/3' },
+                      { key: 'nodejs_two', name: '二号源', api: '/spider/two/3' }
+                    ]
+                  }
+                }));
+                return;
+              }
+              if (request.url === '/spider/one/3/search') {
+                response.end(JSON.stringify({
+                  list: [{ vod_id: 'one-' + body.wd, vod_name: body.wd + ' A' }]
+                }));
+                return;
+              }
+              if (request.url === '/spider/two/3/search') {
+                response.end(JSON.stringify({
+                  list: [{ vod_id: 'two-' + body.wd, vod_name: body.wd + ' B' }]
+                }));
+                return;
+              }
+              response.statusCode = 404;
+              response.end(JSON.stringify({ error: 'not found' }));
+            });
+          });
+          server.listen({ port: 9988 }, () => {});
+        }
+      };
+    `,
+    timeoutMs: 3000,
+  });
+
+  const sources = await runner.sources({
+    scriptUrl: 'https://cat.example.com/index.js',
+  });
+  const search = await runner.search({
+    keyword: '痴迷',
+    scriptUrl: 'https://cat.example.com/index.js',
+    siteBasePath: '/spider/two/3',
+  });
+
+  assert.deepEqual(sources.sites, [
+    { key: 'nodejs_one', name: '一号源', api: '/spider/one/3' },
+    { key: 'nodejs_two', name: '二号源', api: '/spider/two/3' },
+  ]);
+  assert.equal(search.list.length, 1);
+  assert.equal(search.list[0].source_name, '二号源');
+  assert.equal(search.list[0].vod_name, '痴迷 B');
+});
+
+test('CatVodRunner loads bundle home lists from the selected source', async () => {
+  const runner = new CatVodRunner({
+    fetchText: async () => `
+      module.exports = {
+        async start() {
+          const server = catServerFactory(async (request, response) => {
+            response.setHeader('content-type', 'application/json');
+            if (request.url === '/config') {
+              response.end(JSON.stringify({
+                video: {
+                  sites: [{ key: 'nodejs_home', name: '首页源', api: '/spider/home/3' }]
+                }
+              }));
+              return;
+            }
+            if (request.url === '/spider/home/3/home') {
+              response.end(JSON.stringify({
+                list: [{ vod_id: 'home-1', vod_name: '首页影片' }]
+              }));
+              return;
+            }
+            response.statusCode = 404;
+            response.end(JSON.stringify({ error: 'not found' }));
+          });
+          server.listen({ port: 9988 }, () => {});
+        }
+      };
+    `,
+    timeoutMs: 3000,
+  });
+
+  const home = await runner.home({
+    scriptUrl: 'https://cat.example.com/index.js',
+    siteBasePath: '/spider/home/3',
+  });
+
+  assert.equal(home.list[0].vod_name, '首页影片');
+  assert.equal(home.list[0].source_name, '首页源');
+  assert.match(home.list[0].vod_id, /^catvod:/);
 });
 
 test('CatVodRunner reports bundle route parser failures as incompatible source errors', async () => {

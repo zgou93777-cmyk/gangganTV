@@ -18,6 +18,24 @@ async function fetchPluginServerSearch(config, keyword, fetchImpl = fetch) {
   const payload = await postPluginServer(config, '/catvod/search', {
     keyword,
     scriptUrl: config?.scriptUrl,
+    ...(config?.siteBasePath ? { siteBasePath: config.siteBasePath } : {}),
+  }, fetchImpl);
+
+  return normalizeCatVodSearchResult(payload);
+}
+
+async function fetchPluginServerSources(config, fetchImpl = fetch) {
+  const payload = await postPluginServer(config, '/catvod/sources', {
+    scriptUrl: config?.scriptUrl,
+  }, fetchImpl);
+
+  return Array.isArray(payload?.sites) ? payload.sites : [];
+}
+
+async function fetchPluginServerHome(config, fetchImpl = fetch) {
+  const payload = await postPluginServer(config, '/catvod/home', {
+    scriptUrl: config?.scriptUrl,
+    ...(config?.siteBasePath ? { siteBasePath: config.siteBasePath } : {}),
   }, fetchImpl);
 
   return normalizeCatVodSearchResult(payload);
@@ -150,6 +168,8 @@ function buildPluginServerHeaders(token) {
 module.exports = {
   fetchPluginServerHealth,
   fetchPluginServerDetail,
+  fetchPluginServerHome,
   fetchPluginServerPlay,
   fetchPluginServerSearch,
+  fetchPluginServerSources,
 };

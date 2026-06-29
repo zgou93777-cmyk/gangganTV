@@ -87,6 +87,54 @@ test('server accepts bearer token and forwards CatVod search requests to runner'
   ]);
 });
 
+test('server forwards CatVod sources and home requests to runner', async () => {
+  const calls = [];
+  const server = createParserServer({
+    runner: {
+      async sources(payload) {
+        calls.push(['sources', payload]);
+        return { sites: [{ key: 'nodejs_one', name: '一号源', api: '/spider/one/3' }] };
+      },
+      async home(payload) {
+        calls.push(['home', payload]);
+        return { list: [{ vod_id: 'home-1', vod_name: '首页影片' }] };
+      },
+    },
+  });
+
+  const sources = await server.inject({
+    body: {
+      scriptUrl: 'https://cat.example.com/index.js',
+    },
+    method: 'POST',
+    path: '/catvod/sources',
+  });
+  const home = await server.inject({
+    body: {
+      scriptUrl: 'https://cat.example.com/index.js',
+      siteBasePath: '/spider/one/3',
+    },
+    method: 'POST',
+    path: '/catvod/home',
+  });
+
+  assert.equal(sources.statusCode, 200);
+  assert.equal(home.statusCode, 200);
+  assert.deepEqual(calls, [
+    ['sources', { scriptUrl: 'https://cat.example.com/index.js' }],
+    [
+      'home',
+      {
+        scriptUrl: 'https://cat.example.com/index.js',
+        siteBasePath: '/spider/one/3',
+      },
+    ],
+  ]);
+  assert.deepEqual(home.json(), {
+    list: [{ vod_id: 'home-1', vod_name: '首页影片' }],
+  });
+});
+
 test('server forwards CatVod detail and play requests to runner', async () => {
   const calls = [];
   const server = createParserServer({

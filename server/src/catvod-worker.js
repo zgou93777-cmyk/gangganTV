@@ -148,16 +148,77 @@ async function callBundleHost(context, method, payload) {
     return callBundleServerHost(context, method, payload);
   }
 
-  const siteBasePath = await resolveBundleSiteBasePath(app);
-  const request = routeRequest(method, unwrapBundlePayload(method, payload, siteBasePath));
+  const sites = await resolveBundleSites(app);
+
+  if (method === 'sources') {
+    return {
+      called: true,
+      value: { sites },
+    };
+  }
+
+  if (method === 'search') {
+    const mergedList = [];
+    const selectedSiteBasePath = normalizeSiteBasePath(payload?.siteBasePath || '');
+    const searchSites = selectedSiteBasePath
+      ? sites.filter(
+          (site) => normalizeSiteBasePath(site.api || '') === selectedSiteBasePath
+        )
+      : sites;
+
+    for (const site of searchSites) {
+      const siteBasePath = normalizeSiteBasePath(site.api || '');
+      const request = routeRequest(method, payload);
+      let value;
+
+      try {
+        value = await app.inject({
+          ...request,
+          path: `${siteBasePath}${request.path}`,
+        });
+      } catch {
+        continue;
+      }
+
+      if ((value?.list || []).length) {
+        const wrapped = wrapBundleResult(method, value, siteBasePath, site);
+        mergedList.push(...(wrapped.list || []));
+      }
+    }
+
+    return {
+      called: true,
+      value: { list: mergedList },
+    };
+  }
+
+  if (method === 'home') {
+    const site = selectBundleSite(sites, payload?.siteBasePath);
+    const siteBasePath = normalizeSiteBasePath(site.api || '');
+    const value = await app.inject({
+      ...routeRequest(method, payload),
+      path: `${siteBasePath}/home`,
+    });
+
+    return {
+      called: true,
+      value: wrapBundleResult('search', value, siteBasePath, site),
+    };
+  }
+
+  const fallbackSiteBasePath = normalizeSiteBasePath(sites[0].api || '');
+  const unwrappedPayload = unwrapBundlePayload(method, payload, fallbackSiteBasePath);
+  const request = routeRequest(method, unwrappedPayload);
+  const requestSiteBasePath = unwrappedPayload.siteBasePath || fallbackSiteBasePath;
+  const site = selectBundleSite(sites, requestSiteBasePath);
   const value = await app.inject({
     ...request,
-    path: `${request.siteBasePath || siteBasePath}${request.path}`,
+    path: `${requestSiteBasePath}${request.path}`,
   });
 
   return {
     called: true,
-    value: wrapBundleResult(method, value, request.siteBasePath || siteBasePath),
+    value: wrapBundleResult(method, value, requestSiteBasePath, site),
   };
 }
 
@@ -181,11 +242,24 @@ async function callBundleServerHost(context, method, payload) {
     });
   }
 
+  if (method === 'sources') {
+    return {
+      called: true,
+      value: { sites },
+    };
+  }
+
   if (method === 'search') {
     const mergedList = [];
+    const selectedSiteBasePath = normalizeSiteBasePath(payload?.siteBasePath || '');
+    const searchSites = selectedSiteBasePath
+      ? sites.filter(
+          (site) => normalizeSiteBasePath(site.api || '') === selectedSiteBasePath
+        )
+      : sites;
 
-    for (const site of sites) {
-      const siteBasePath = String(site.api || '').replace(/\/+$/, '');
+    for (const site of searchSites) {
+      const siteBasePath = normalizeSiteBasePath(site.api || '');
       const request = routeRequest(method, payload);
       let value;
 
@@ -210,7 +284,21 @@ async function callBundleServerHost(context, method, payload) {
     };
   }
 
-  const fallbackSiteBasePath = String(sites[0].api || '').replace(/\/+$/, '');
+  if (method === 'home') {
+    const site = selectBundleSite(sites, payload?.siteBasePath);
+    const siteBasePath = normalizeSiteBasePath(site.api || '');
+    const value = await server.injectJson({
+      ...routeRequest(method, payload),
+      path: `${siteBasePath}/home`,
+    });
+
+    return {
+      called: true,
+      value: wrapBundleResult('search', value, siteBasePath, site),
+    };
+  }
+
+  const fallbackSiteBasePath = normalizeSiteBasePath(sites[0].api || '');
   const unwrappedPayload = unwrapBundlePayload(method, payload, fallbackSiteBasePath);
   const request = routeRequest(method, unwrappedPayload);
   const requestSiteBasePath = unwrappedPayload.siteBasePath || fallbackSiteBasePath;
@@ -226,20 +314,37 @@ async function callBundleServerHost(context, method, payload) {
 }
 
 async function resolveBundleSiteBasePath(app) {
+  return normalizeSiteBasePath((await resolveBundleSites(app))[0].api || '');
+}
+
+async function resolveBundleSites(app) {
   const config = await app.inject({
     method: 'GET',
     path: '/config',
   });
-  const site = config?.video?.sites?.find((candidate) => candidate?.api);
+  const sites = (config?.video?.sites || []).filter((candidate) => candidate?.api);
 
-  if (!site) {
+  if (!sites.length) {
     throw Object.assign(new Error('Bundle plugin did not expose any video sites.'), {
       code: 'PLUGIN_SITE_MISSING',
       statusCode: 422,
     });
   }
 
-  return String(site.api || '').replace(/\/+$/, '');
+  return sites;
+}
+
+function selectBundleSite(sites, siteBasePath) {
+  const selectedSiteBasePath = normalizeSiteBasePath(siteBasePath || sites[0]?.api || '');
+  return (
+    sites.find(
+      (candidate) => normalizeSiteBasePath(candidate.api || '') === selectedSiteBasePath
+    ) || sites[0]
+  );
+}
+
+function normalizeSiteBasePath(value) {
+  return String(value || '').replace(/\/+$/, '');
 }
 
 function buildPlainArgs(method, payload) {
@@ -255,6 +360,14 @@ function buildPlainArgs(method, payload) {
 }
 
 function routeRequest(method, payload) {
+  if (method === 'home' || method === 'sources') {
+    return {
+      body: {},
+      method: 'POST',
+      path: method === 'home' ? '/home' : '/config',
+    };
+  }
+
   if (method === 'search') {
     return {
       body: {

@@ -19,6 +19,14 @@ class CatVodRunner {
     return this.call('search', payload);
   }
 
+  async sources(payload) {
+    return this.call('sources', payload);
+  }
+
+  async home(payload) {
+    return this.call('home', payload);
+  }
+
   async detail(payload) {
     return this.call('detail', payload);
   }

@@ -4,8 +4,10 @@ const test = require('node:test');
 const {
   fetchPluginServerHealth,
   fetchPluginServerDetail,
+  fetchPluginServerHome,
   fetchPluginServerPlay,
   fetchPluginServerSearch,
+  fetchPluginServerSources,
 } = require('../src/plugin-server-client');
 
 test('fetchPluginServerHealth loads parser service health', async () => {
@@ -67,6 +69,50 @@ test('fetchPluginServerSearch posts script and keyword then normalizes results',
   ]);
   assert.deepEqual(results, [
     { id: 'movie-1', name: '三体', poster: '', remarks: '' },
+  ]);
+});
+
+test('fetchPluginServerSources and home expose CatVod bundle source metadata', async () => {
+  const sources = await fetchPluginServerSources(
+    {
+      baseUrl: 'https://parser.example.com',
+      token: 'secret-token',
+      scriptUrl: 'https://cat.example.com/index.js',
+    },
+    async (url, options) => {
+      assert.equal(url, 'https://parser.example.com/catvod/sources');
+      assert.equal(options.headers.Authorization, 'Bearer secret-token');
+      assert.deepEqual(JSON.parse(options.body), {
+        scriptUrl: 'https://cat.example.com/index.js',
+      });
+      return jsonResponse({
+        sites: [{ key: 'nodejs_one', name: '一号源', api: '/spider/one/3' }],
+      });
+    }
+  );
+  const home = await fetchPluginServerHome(
+    {
+      baseUrl: 'https://parser.example.com',
+      scriptUrl: 'https://cat.example.com/index.js',
+      siteBasePath: '/spider/one/3',
+    },
+    async (url, options) => {
+      assert.equal(url, 'https://parser.example.com/catvod/home');
+      assert.deepEqual(JSON.parse(options.body), {
+        scriptUrl: 'https://cat.example.com/index.js',
+        siteBasePath: '/spider/one/3',
+      });
+      return jsonResponse({
+        list: [{ vod_id: 'home-1', vod_name: '首页影片' }],
+      });
+    }
+  );
+
+  assert.deepEqual(sources, [
+    { key: 'nodejs_one', name: '一号源', api: '/spider/one/3' },
+  ]);
+  assert.deepEqual(home, [
+    { id: 'home-1', name: '首页影片', poster: '', remarks: '' },
   ]);
 });
 
