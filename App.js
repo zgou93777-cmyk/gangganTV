@@ -353,6 +353,16 @@ export default function App() {
     setSites(nextSites);
     setPlayHistory(nextPlayHistory);
     setSearchHistory(nextSearchHistory);
+    const restoredPluginSource = nextSources.find((source) => source?.kind === 'plugin');
+    if (restoredPluginSource) {
+      const restoredPluginSite = nextSites.find(
+        (site) => site?.runtime === 'catvod-server' && site?.sourceId === restoredPluginSource.id
+      );
+      setCatVodSource({
+        ...restoredPluginSource,
+        scriptUrl: restoredPluginSite?.scriptUrl || restoredPluginSource.url,
+      });
+    }
 
     if (nextSites.some((site) => site.id === storedSelectedSiteId)) {
       setSelectedSiteId(storedSelectedSiteId);
@@ -1059,8 +1069,11 @@ export default function App() {
       });
       const ok = Boolean(health?.ok);
       const capabilities = health?.capabilities || {};
+      const hasPluginHomeRoutes =
+        capabilities.catvodSources === true && capabilities.catvodHome === true;
       const capabilityText = [
         capabilities.catvod ? 'CatVod 可用' : 'CatVod 未确认',
+        hasPluginHomeRoutes ? '插件首页可用' : '插件首页缺失',
         capabilities.tvboxRoutes ? 'TVBox 路由可用' : 'TVBox 路由缺失',
         capabilities.tvboxRuntime ? 'TVBox Spider 已连接' : 'TVBox Spider 未连接',
       ].join('，');
@@ -1072,6 +1085,10 @@ export default function App() {
           ? `本地解析服务正常：${capabilityText}`
           : '服务返回异常状态',
       });
+      if (ok && !hasPluginHomeRoutes) {
+        setMessage('本地解析器版本偏旧：请重启/更新 3000 解析器后再刷新首页');
+        return;
+      }
       if (ok && catVodSource?.url) {
         const scriptUrl = catVodSource.scriptUrl || catVodSource.url;
         await expandPluginServerSources(catVodSource, scriptUrl);

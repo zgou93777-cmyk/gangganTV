@@ -195,9 +195,15 @@ async function callBundleHost(context, method, payload) {
   if (method === 'home') {
     const site = selectBundleSite(sites, payload?.siteBasePath);
     const siteBasePath = normalizeSiteBasePath(site.api || '');
-    const value = await app.inject({
+    let value = await app.inject({
       ...routeRequest(method, payload),
       path: `${siteBasePath}/home`,
+    });
+    value = await loadCategoryHomeFallback({
+      injectJson: (request) => app.inject(request),
+      site,
+      siteBasePath,
+      value,
     });
 
     return {
@@ -287,9 +293,15 @@ async function callBundleServerHost(context, method, payload) {
   if (method === 'home') {
     const site = selectBundleSite(sites, payload?.siteBasePath);
     const siteBasePath = normalizeSiteBasePath(site.api || '');
-    const value = await server.injectJson({
+    let value = await server.injectJson({
       ...routeRequest(method, payload),
       path: `${siteBasePath}/home`,
+    });
+    value = await loadCategoryHomeFallback({
+      injectJson: (request) => server.injectJson(request),
+      site,
+      siteBasePath,
+      value,
     });
 
     return {
@@ -379,6 +391,19 @@ function routeRequest(method, payload) {
     };
   }
 
+  if (method === 'category') {
+    return {
+      body: {
+        extend: payload.extend || {},
+        filter: true,
+        page: payload.page || 1,
+        tid: payload.tid || '',
+      },
+      method: 'POST',
+      path: '/category',
+    };
+  }
+
   if (method === 'detail') {
     return {
       body: {
@@ -425,6 +450,44 @@ function wrapBundleResult(method, value, siteBasePath, site = null) {
   }
 
   return value;
+}
+
+async function loadCategoryHomeFallback({ injectJson, site, siteBasePath, value }) {
+  if ((value?.list || []).length) {
+    return value;
+  }
+
+  const firstCategory = Array.isArray(value?.class)
+    ? value.class.find((category) => category?.type_id || category?.typeId || category?.id)
+    : null;
+  const typeId = firstCategory?.type_id || firstCategory?.typeId || firstCategory?.id;
+
+  if (!typeId) {
+    return value;
+  }
+
+  try {
+    const categoryValue = await injectJson({
+      ...routeRequest('category', {
+        extend: {},
+        page: 1,
+        tid: typeId,
+      }),
+      path: `${siteBasePath}/category`,
+    });
+
+    return {
+      ...value,
+      ...categoryValue,
+      class: value.class,
+      filters: value.filters,
+      source_api: siteBasePath,
+      source_key: site?.key || '',
+      source_name: site?.name || site?.key || siteBasePath,
+    };
+  } catch {
+    return value;
+  }
 }
 
 function unwrapBundlePayload(method, payload, fallbackSiteBasePath) {

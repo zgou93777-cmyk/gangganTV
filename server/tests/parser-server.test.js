@@ -19,6 +19,8 @@ test('GET /health reports service status', async () => {
   assert.deepEqual(response.json(), {
     capabilities: {
       catvod: true,
+      catvodHome: true,
+      catvodSources: true,
       tvboxRoutes: true,
       tvboxRuntime: false,
     },
@@ -265,11 +267,17 @@ function fixedRunner() {
     async detail() {
       return { list: [] };
     },
+    async home() {
+      return { list: [] };
+    },
     async play() {
       return { url: '' };
     },
     async search() {
       return { list: [] };
+    },
+    async sources() {
+      return { sites: [] };
     },
   };
 }

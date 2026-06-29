@@ -20,11 +20,33 @@ function normalizeCatVodSearchResult(payload) {
 
     return {
       ...result,
+      poster: normalizeCatVodImageUrl(result.poster),
       ...(sourceId ? { sourceId } : {}),
       ...(sourceName ? { sourceName } : {}),
       ...(sourceApi ? { sourceApi } : {}),
     };
   });
+}
+
+function normalizeCatVodImageUrl(value) {
+  const cleanValue = readableText(value);
+
+  if (!cleanValue) {
+    return '';
+  }
+
+  try {
+    const parsedUrl = new URL(cleanValue);
+    const proxiedUrl = parsedUrl.searchParams.get('url');
+
+    if (parsedUrl.pathname.includes('/imageProxy') && isValidHttpUrl(proxiedUrl || '')) {
+      return proxiedUrl.trim();
+    }
+  } catch {
+    return cleanValue;
+  }
+
+  return cleanValue;
 }
 
 function normalizeCatVodDetailResult(payload) {

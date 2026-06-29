@@ -335,6 +335,51 @@ test('CatVodRunner exposes createCatApp bundle sources and searches one selected
   assert.equal(home.list[0].vod_name, 'Home Two');
 });
 
+test('CatVodRunner falls back to the first category when bundle home has no list', async () => {
+  const runner = new CatVodRunner({
+    fetchText: async () => `
+      module.exports = {
+        async start(config) {
+          const app = createCatApp({ config });
+          app.register(async (server) => {
+            server.register(async (spider) => {
+              spider.post('/home', async () => ({
+                class: [{ type_id: 'hot_gaia', type_name: '热门内容' }],
+                list: []
+              }));
+              spider.post('/category', async (request) => ({
+                list: [{
+                  vod_id: 'category-' + request.body.tid,
+                  vod_name: 'Category Home',
+                  vod_pic: 'https://img.example.com/home.jpg'
+                }]
+              }));
+            }, { prefix: '/spider/douban/3' });
+            server.get('/config', async () => ({
+              video: {
+                sites: [{ key: 'nodejs_douban', name: '豆瓣首页', api: '/spider/douban/3' }]
+              }
+            }));
+          });
+          await app.ready();
+          globalThis.__catvodApp = app;
+        }
+      };
+    `,
+    timeoutMs: 3000,
+  });
+
+  const home = await runner.home({
+    scriptUrl: 'https://cat.example.com/index.js',
+    siteBasePath: '/spider/douban/3',
+  });
+
+  assert.equal(home.list.length, 1);
+  assert.equal(home.list[0].source_name, '豆瓣首页');
+  assert.equal(home.list[0].vod_name, 'Category Home');
+  assert.match(home.list[0].vod_id, /^catvod:/);
+});
+
 test('CatVodRunner gives start plugins an in-memory host instead of opening a port', async () => {
   const runner = new CatVodRunner({
     fetchText: async () => `

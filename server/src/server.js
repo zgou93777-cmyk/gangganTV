@@ -24,6 +24,8 @@ function createParserServer(options = {}) {
   routes.set('GET /health', async () => ({
     capabilities: {
       catvod: true,
+      catvodHome: typeof runner?.home === 'function',
+      catvodSources: typeof runner?.sources === 'function',
       tvboxRoutes: true,
       tvboxRuntime: Boolean(
         tvBoxRunner?.runtime &&

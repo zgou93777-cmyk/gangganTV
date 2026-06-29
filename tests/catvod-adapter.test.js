@@ -33,6 +33,21 @@ test('normalizes CatVod search lists into app search results', () => {
   ]);
 });
 
+test('normalizes CatVod image proxy poster urls to their remote image url', () => {
+  const results = normalizeCatVodSearchResult({
+    list: [
+      {
+        vod_id: 'movie-1',
+        vod_name: '豆瓣电影',
+        vod_pic:
+          'http://127.0.0.1:0/imageProxy?url=https%3A%2F%2Fimg.example.com%2Fposter.jpg&cache=86400',
+      },
+    ],
+  });
+
+  assert.equal(results[0].poster, 'https://img.example.com/poster.jpg');
+});
+
 test('normalizes CatVod detail payloads into play groups', () => {
   const detail = normalizeCatVodDetailResult({
     list: [
