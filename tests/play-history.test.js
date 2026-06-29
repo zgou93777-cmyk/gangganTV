@@ -3,6 +3,7 @@ const test = require('node:test');
 
 const {
   addPlayHistoryItem,
+  deletePlayHistoryItems,
   normalizePlayHistory,
 } = require('../src/play-history');
 
@@ -117,4 +118,63 @@ test('limits history to the requested maximum count', () => {
     nextHistory.map((item) => item.title),
     ['Movie', 'Channel 1', 'Channel 2']
   );
+});
+
+test('deletePlayHistoryItems removes selected history ids and keeps the remaining order', () => {
+  const history = [
+    {
+      type: 'vod',
+      title: 'Movie 1',
+      url: 'https://example.com/1.m3u8',
+    },
+    {
+      type: 'vod',
+      title: 'Movie 2',
+      url: 'https://example.com/2.m3u8',
+    },
+    {
+      type: 'vod',
+      title: 'Movie 3',
+      url: 'https://example.com/3.m3u8',
+    },
+  ];
+
+  const nextHistory = deletePlayHistoryItems(history, [
+    'https://example.com/1.m3u8',
+    'https://example.com/3.m3u8',
+  ]);
+
+  assert.deepEqual(
+    nextHistory.map((item) => item.url),
+    ['https://example.com/2.m3u8']
+  );
+});
+
+test('deletePlayHistoryItems normalizes history when no ids are selected', () => {
+  const nextHistory = deletePlayHistoryItems(
+    [
+      {
+        type: 'vod',
+        title: 'Movie',
+        url: ' https://example.com/movie.m3u8 ',
+      },
+      {
+        type: 'vod',
+        title: 'Broken',
+        url: 'ftp://example.com/broken.m3u8',
+      },
+    ],
+    []
+  );
+
+  assert.deepEqual(nextHistory, [
+    {
+      id: 'https://example.com/movie.m3u8',
+      type: 'vod',
+      title: 'Movie',
+      url: 'https://example.com/movie.m3u8',
+      sourceName: '',
+      playedAt: '',
+    },
+  ]);
 });

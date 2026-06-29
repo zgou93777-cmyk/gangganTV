@@ -46,6 +46,7 @@ const {
 } = require('./src/ui-model');
 const {
   addPlayHistoryItem,
+  deletePlayHistoryItems,
   normalizePlayHistory,
 } = require('./src/play-history');
 const {
@@ -172,6 +173,8 @@ export default function App() {
   const [playerLayerTitle, setPlayerLayerTitle] = useState('');
   const [playerLayerSource, setPlayerLayerSource] = useState('');
   const [playHistory, setPlayHistory] = useState([]);
+  const [historySelectionMode, setHistorySelectionMode] = useState(false);
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState([]);
   const [message, setMessage] = useState('等待播放地址');
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [scanningConfigSources, setScanningConfigSources] = useState(false);
@@ -385,6 +388,48 @@ export default function App() {
     await playResolvedUrl(item.type || 'vod', item.url, item.title, {
       sourceName: item.sourceName || '播放历史',
     });
+  }
+
+  function toggleHistorySelectionMode() {
+    setHistorySelectionMode((value) => {
+      if (value) {
+        setSelectedHistoryIds([]);
+        setMessage('已退出多选');
+        return false;
+      }
+
+      if (!playHistory.length) {
+        setMessage('还没有可删除的播放历史');
+        return false;
+      }
+
+      setMessage('请选择要删除的播放历史');
+      return true;
+    });
+  }
+
+  function toggleHistorySelection(itemId) {
+    setSelectedHistoryIds((ids) =>
+      ids.includes(itemId)
+        ? ids.filter((id) => id !== itemId)
+        : [...ids, itemId]
+    );
+  }
+
+  async function deleteSelectedHistoryItems() {
+    if (!selectedHistoryIds.length) {
+      setMessage('请先选择要删除的播放历史');
+      return;
+    }
+
+    const nextHistory = deletePlayHistoryItems(playHistory, selectedHistoryIds);
+    const deletedCount = playHistory.length - nextHistory.length;
+
+    setPlayHistory(nextHistory);
+    setSelectedHistoryIds([]);
+    setHistorySelectionMode(false);
+    await saveJson(STORAGE_KEYS.playHistory, nextHistory);
+    setMessage(`已删除 ${deletedCount} 条播放历史`);
   }
 
   async function continueLatestPlay() {
@@ -1503,7 +1548,10 @@ export default function App() {
             pressed && styles.buttonPressed,
           ]}
         >
-          <Text style={styles.sourceIcon}>{menuVisible ? '⌃' : '⌄'}</Text>
+          <Icon
+            name={menuVisible ? 'chevronUp' : 'chevronDown'}
+            style={styles.sourceIcon}
+          />
           <Text numberOfLines={1} style={styles.brandText}>
             {label}
           </Text>
@@ -1753,19 +1801,22 @@ export default function App() {
       <View style={styles.tabContent}>
         <View style={styles.historyTop}>
           <View style={styles.historyPill}>
-            <Text style={styles.historyPillIcon}>◴</Text>
+            <Icon name="history" style={styles.historyPillIcon} />
             <Text style={styles.historyPillText}>播放历史</Text>
           </View>
           <Pressable
             accessibilityRole="button"
-            onPress={() => setMessage('多选删除稍后接入')}
+            onPress={toggleHistorySelectionMode}
             style={({ pressed }) => [
               styles.historyPill,
               styles.historyPillAction,
+              historySelectionMode && styles.historyPillActive,
               pressed && styles.buttonPressed,
             ]}
           >
-            <Text style={styles.historyPillText}>多选</Text>
+            <Text style={styles.historyPillText}>
+              {historySelectionMode ? '取消' : '多选'}
+            </Text>
           </Pressable>
         </View>
 
@@ -1810,11 +1861,19 @@ export default function App() {
                 <Pressable
                   accessibilityRole="button"
                   key={item.id}
-                  onPress={() =>
-                    playHistoryItem(item).catch(() => setMessage('历史播放失败'))
-                  }
+                  onPress={() => {
+                    if (historySelectionMode) {
+                      toggleHistorySelection(item.id);
+                      return;
+                    }
+
+                    playHistoryItem(item).catch(() => setMessage('历史播放失败'));
+                  }}
                   style={({ pressed }) => [
                     styles.historyMediaRow,
+                    historySelectionMode &&
+                      selectedHistoryIds.includes(item.id) &&
+                      styles.historyMediaRowSelected,
                     pressed && styles.buttonPressed,
                   ]}
                 >
@@ -1834,7 +1893,19 @@ export default function App() {
                       {item.url}
                     </Text>
                   </View>
-                  <View style={styles.historySelectCircle} />
+                  {historySelectionMode ? (
+                    <View
+                      style={[
+                        styles.historySelectCircle,
+                        selectedHistoryIds.includes(item.id) &&
+                          styles.historySelectCircleActive,
+                      ]}
+                    >
+                      {selectedHistoryIds.includes(item.id) ? (
+                        <Icon name="check" style={styles.historySelectIcon} />
+                      ) : null}
+                    </View>
+                  ) : null}
                 </Pressable>
               ))}
             </View>
@@ -1846,6 +1917,24 @@ export default function App() {
               </Text>
             </View>
           )}
+          {historySelectionMode ? (
+            <View style={styles.historyDeleteBar}>
+              <Text style={styles.historyDeleteText}>
+                已选择 {selectedHistoryIds.length} 条
+              </Text>
+              <CompactButton
+                disabled={!selectedHistoryIds.length}
+                onPress={() =>
+                  deleteSelectedHistoryItems().catch(() =>
+                    setMessage('删除播放历史失败')
+                  )
+                }
+                variant="danger"
+              >
+                删除
+              </CompactButton>
+            </View>
+          ) : null}
         </View>
 
         {currentUrl ? (
@@ -1868,7 +1957,7 @@ export default function App() {
       <View style={styles.tabContent}>
         <View style={styles.settingsHero}>
           <View style={styles.settingsHeroTop}>
-            <Text style={styles.settingsHeroIcon}>♕</Text>
+            <Icon name="shield" style={styles.settingsHeroIcon} />
             <Text style={styles.settingsHeroTitle}>私人 IPTV Pro</Text>
             <Text style={styles.settingsHeroState}>本机保存</Text>
           </View>
@@ -2228,7 +2317,7 @@ export default function App() {
               pressed && styles.buttonPressed,
             ]}
           >
-            <Text style={styles.searchBackText}>‹</Text>
+            <Icon name="back" style={styles.searchBackText} />
           </Pressable>
           <TextInput
             autoCorrect={false}
@@ -2253,7 +2342,7 @@ export default function App() {
               pressed && styles.buttonPressed,
             ]}
           >
-            <Text style={styles.searchSourceButtonText}>☰</Text>
+            <Icon name="sliders" style={styles.searchSourceButtonText} />
           </Pressable>
         </View>
 
@@ -2404,7 +2493,7 @@ export default function App() {
               pressed && styles.buttonPressed,
             ]}
           >
-            <Text style={styles.detailBackText}>‹</Text>
+            <Icon name="back" style={styles.detailBackText} />
           </Pressable>
         </View>
 
@@ -2440,7 +2529,7 @@ export default function App() {
             {loadingEpisodeKey ? (
               <ActivityIndicator color="#050505" />
             ) : (
-              <Text style={styles.detailPlayIcon}>▶</Text>
+              <Icon name="play" style={styles.detailPlayIcon} />
             )}
             <View>
               <Text style={styles.detailPlayTitle}>
@@ -2453,9 +2542,9 @@ export default function App() {
           </Pressable>
 
           <View style={styles.detailActionRow}>
-            <Text style={styles.detailActionIcon}>⌕</Text>
-            <Text style={styles.detailActionIcon}>♡</Text>
-            <Text style={styles.detailActionIcon}>⋯</Text>
+            <Icon name="search" style={styles.detailActionIcon} />
+            <Icon name="favorite" style={styles.detailActionIcon} />
+            <Icon name="more" style={styles.detailActionIcon} />
           </View>
 
           <Text numberOfLines={4} style={styles.detailDescription}>
@@ -2466,7 +2555,7 @@ export default function App() {
             <Text style={styles.detailLineTitle}>
               {selectedPosterDetail.sourceName}
             </Text>
-            <Text style={styles.detailLineArrow}>⌄</Text>
+            <Icon name="chevronDown" style={styles.detailLineArrow} />
           </View>
 
           {playGroups.length ? (
@@ -2547,7 +2636,7 @@ export default function App() {
               pressed && styles.buttonPressed,
             ]}
           >
-            <Text style={styles.playerCloseText}>‹</Text>
+            <Icon name="back" style={styles.playerCloseText} />
           </Pressable>
           <View style={styles.playerLayerTitleWrap}>
             <Text numberOfLines={1} style={styles.playerLayerTitle}>
@@ -2622,7 +2711,7 @@ export default function App() {
                       pressed && styles.buttonPressed,
                     ]}
                   >
-                    <Text style={styles.circleButtonText}>⌁</Text>
+                    <Icon name="settings" style={styles.circleButtonText} />
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
@@ -2636,7 +2725,7 @@ export default function App() {
                       pressed && styles.buttonPressed,
                     ]}
                   >
-                    <Text style={styles.circleButtonText}>⌕</Text>
+                    <Icon name="search" style={styles.circleButtonText} />
                   </Pressable>
                 </View>
               </View>
@@ -2678,7 +2767,7 @@ export default function App() {
             ) : activeTab !== 'discover' ? (
               <View style={styles.idleStatusPanel}>
                 <View style={styles.idleStatusIconWrap}>
-                  <Text style={styles.idleStatusIcon}>▶</Text>
+                  <Icon name="play" style={styles.idleStatusIcon} />
                 </View>
                 <View style={styles.rowMain}>
                   <Text style={styles.idleStatusTitle}>等待播放</Text>
@@ -2799,14 +2888,13 @@ function BottomTabs({ activeTab, onChange, tabs }) {
               pressed && styles.buttonPressed,
             ]}
           >
-            <Text
+            <Icon
+              name={tab.icon}
               style={[
                 styles.bottomTabSymbol,
                 isActive && styles.bottomTabSymbolActive,
               ]}
-            >
-              {tab.symbol}
-            </Text>
+            />
             <Text
               style={[
                 styles.bottomTabText,
@@ -2820,6 +2908,127 @@ function BottomTabs({ activeTab, onChange, tabs }) {
       })}
     </View>
   );
+}
+
+function Icon({ name, style }) {
+  const flattenedStyle = StyleSheet.flatten(style) || {};
+  const color = flattenedStyle.color || COLORS.ink;
+  const size = flattenedStyle.fontSize || flattenedStyle.width || 24;
+
+  return (
+    <View
+      style={[
+        styles.icon,
+        {
+          height: size,
+          width: size,
+        },
+      ]}
+      pointerEvents="none"
+    >
+      {renderIconShape(name, color)}
+    </View>
+  );
+}
+
+function renderIconShape(name, color) {
+  switch (name) {
+    case 'back':
+      return (
+        <View style={styles.iconBack}>
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconBackTop]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconBackBottom]} />
+        </View>
+      );
+    case 'check':
+      return (
+        <View style={styles.iconCheck}>
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconCheckShort]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconCheckLong]} />
+        </View>
+      );
+    case 'chevronDown':
+      return (
+        <View style={styles.iconChevron}>
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconChevronLeft]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconChevronRight]} />
+        </View>
+      );
+    case 'chevronUp':
+      return (
+        <View style={styles.iconChevron}>
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconChevronUpLeft]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconChevronUpRight]} />
+        </View>
+      );
+    case 'favorite':
+      return (
+        <View style={styles.iconFavorite}>
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconFavoriteLeft]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconFavoriteRight]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconFavoriteBottomLeft]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconFavoriteBottomRight]} />
+        </View>
+      );
+    case 'history':
+      return (
+        <View style={styles.iconHistory}>
+          <View style={[styles.iconHistoryRing, { borderColor: color }]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconHistoryHand]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconHistoryNeedle]} />
+        </View>
+      );
+    case 'more':
+      return (
+        <View style={styles.iconMore}>
+          <View style={[styles.iconDot, { backgroundColor: color }]} />
+          <View style={[styles.iconDot, { backgroundColor: color }]} />
+          <View style={[styles.iconDot, { backgroundColor: color }]} />
+        </View>
+      );
+    case 'play':
+      return <View style={[styles.iconPlayTriangle, { borderLeftColor: color }]} />;
+    case 'search':
+      return (
+        <View style={styles.iconSearch}>
+          <View style={[styles.iconSearchRing, { borderColor: color }]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconSearchHandle]} />
+        </View>
+      );
+    case 'settings':
+      return (
+        <View style={styles.iconSettings}>
+          <View style={[styles.iconSettingsRing, { borderColor: color }]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconSettingsTop]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconSettingsRight]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconSettingsBottom]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconSettingsLeft]} />
+        </View>
+      );
+    case 'shield':
+      return (
+        <View style={styles.iconShield}>
+          <View style={[styles.iconShieldTop, { borderColor: color }]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconShieldLeft]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconShieldRight]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconShieldBottomLeft]} />
+          <View style={[styles.iconLine, { backgroundColor: color }, styles.iconShieldBottomRight]} />
+        </View>
+      );
+    case 'sliders':
+      return (
+        <View style={styles.iconSliders}>
+          <View style={[styles.iconSliderLine, { backgroundColor: color }]}>
+            <View style={[styles.iconSliderKnobLeft, { backgroundColor: color }]} />
+          </View>
+          <View style={[styles.iconSliderLine, { backgroundColor: color }]}>
+            <View style={[styles.iconSliderKnobRight, { backgroundColor: color }]} />
+          </View>
+        </View>
+      );
+    default:
+      return null;
+  }
 }
 
 function QuickAction({ label, onPress, value }) {
@@ -4214,6 +4423,272 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.55,
   },
+  icon: {
+    alignItems: 'center',
+    flexShrink: 0,
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  iconLine: {
+    borderRadius: 999,
+    height: 2.2,
+    position: 'absolute',
+  },
+  iconBack: {
+    height: 24,
+    width: 24,
+  },
+  iconBackTop: {
+    left: 5,
+    top: 7,
+    transform: [{ rotate: '-42deg' }],
+    width: 13,
+  },
+  iconBackBottom: {
+    left: 5,
+    top: 15,
+    transform: [{ rotate: '42deg' }],
+    width: 13,
+  },
+  iconCheck: {
+    height: 24,
+    width: 24,
+  },
+  iconCheckShort: {
+    left: 5,
+    top: 13,
+    transform: [{ rotate: '45deg' }],
+    width: 7,
+  },
+  iconCheckLong: {
+    left: 10,
+    top: 11,
+    transform: [{ rotate: '-45deg' }],
+    width: 12,
+  },
+  iconChevron: {
+    height: 24,
+    width: 24,
+  },
+  iconChevronLeft: {
+    left: 6,
+    top: 11,
+    transform: [{ rotate: '42deg' }],
+    width: 8,
+  },
+  iconChevronRight: {
+    right: 6,
+    top: 11,
+    transform: [{ rotate: '-42deg' }],
+    width: 8,
+  },
+  iconChevronUpLeft: {
+    left: 6,
+    top: 11,
+    transform: [{ rotate: '-42deg' }],
+    width: 8,
+  },
+  iconChevronUpRight: {
+    right: 6,
+    top: 11,
+    transform: [{ rotate: '42deg' }],
+    width: 8,
+  },
+  iconFavorite: {
+    height: 24,
+    width: 24,
+  },
+  iconFavoriteLeft: {
+    left: 6,
+    top: 7,
+    transform: [{ rotate: '-28deg' }],
+    width: 8,
+  },
+  iconFavoriteRight: {
+    right: 6,
+    top: 7,
+    transform: [{ rotate: '28deg' }],
+    width: 8,
+  },
+  iconFavoriteBottomLeft: {
+    left: 8,
+    top: 13,
+    transform: [{ rotate: '46deg' }],
+    width: 9,
+  },
+  iconFavoriteBottomRight: {
+    right: 8,
+    top: 13,
+    transform: [{ rotate: '-46deg' }],
+    width: 9,
+  },
+  iconHistory: {
+    height: 24,
+    width: 24,
+  },
+  iconHistoryRing: {
+    borderRadius: 8,
+    borderWidth: 2,
+    height: 16,
+    left: 4,
+    position: 'absolute',
+    top: 4,
+    width: 16,
+  },
+  iconHistoryHand: {
+    left: 11,
+    top: 8,
+    transform: [{ rotate: '90deg' }],
+    width: 6,
+  },
+  iconHistoryNeedle: {
+    left: 11,
+    top: 11,
+    width: 6,
+  },
+  iconMore: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 3,
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  iconDot: {
+    borderRadius: 2,
+    height: 4,
+    width: 4,
+  },
+  iconPlayTriangle: {
+    borderBottomColor: 'transparent',
+    borderBottomWidth: 7,
+    borderLeftWidth: 12,
+    borderTopColor: 'transparent',
+    borderTopWidth: 7,
+    height: 0,
+    marginLeft: 3,
+    width: 0,
+  },
+  iconSearch: {
+    height: 24,
+    width: 24,
+  },
+  iconSearchRing: {
+    borderRadius: 7,
+    borderWidth: 2,
+    height: 14,
+    left: 4,
+    position: 'absolute',
+    top: 4,
+    width: 14,
+  },
+  iconSearchHandle: {
+    left: 15,
+    top: 16,
+    transform: [{ rotate: '45deg' }],
+    width: 8,
+  },
+  iconSettings: {
+    height: 24,
+    width: 24,
+  },
+  iconSettingsRing: {
+    borderRadius: 5,
+    borderWidth: 2,
+    height: 10,
+    left: 7,
+    position: 'absolute',
+    top: 7,
+    width: 10,
+  },
+  iconSettingsTop: {
+    left: 10,
+    top: 3,
+    width: 4,
+  },
+  iconSettingsRight: {
+    right: 3,
+    top: 11,
+    width: 4,
+  },
+  iconSettingsBottom: {
+    bottom: 3,
+    left: 10,
+    width: 4,
+  },
+  iconSettingsLeft: {
+    left: 3,
+    top: 11,
+    width: 4,
+  },
+  iconShield: {
+    height: 24,
+    width: 24,
+  },
+  iconShieldTop: {
+    borderLeftWidth: 2,
+    borderRadius: 4,
+    borderRightWidth: 2,
+    borderTopWidth: 2,
+    height: 8,
+    left: 6,
+    position: 'absolute',
+    top: 4,
+    width: 12,
+  },
+  iconShieldLeft: {
+    left: 6,
+    top: 10,
+    transform: [{ rotate: '75deg' }],
+    width: 10,
+  },
+  iconShieldRight: {
+    right: 6,
+    top: 10,
+    transform: [{ rotate: '-75deg' }],
+    width: 10,
+  },
+  iconShieldBottomLeft: {
+    left: 8,
+    top: 16,
+    transform: [{ rotate: '42deg' }],
+    width: 6,
+  },
+  iconShieldBottomRight: {
+    right: 8,
+    top: 16,
+    transform: [{ rotate: '-42deg' }],
+    width: 6,
+  },
+  iconSliders: {
+    gap: 7,
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  iconSliderLine: {
+    borderRadius: 999,
+    height: 2.2,
+    position: 'relative',
+    width: 20,
+  },
+  iconSliderKnobLeft: {
+    borderRadius: 4,
+    height: 8,
+    left: 3,
+    position: 'absolute',
+    top: -3,
+    width: 8,
+  },
+  iconSliderKnobRight: {
+    borderRadius: 4,
+    height: 8,
+    position: 'absolute',
+    right: 3,
+    top: -3,
+    width: 8,
+  },
   cardDisabled: {
     opacity: 0.42,
   },
@@ -4694,6 +5169,9 @@ const styles = StyleSheet.create({
   historyPillAction: {
     justifyContent: 'center',
   },
+  historyPillActive: {
+    borderColor: 'rgba(47, 125, 246, 0.52)',
+  },
   historyPillIcon: {
     color: COLORS.ink,
     fontSize: 17,
@@ -4742,9 +5220,14 @@ const styles = StyleSheet.create({
   historyMediaRow: {
     alignItems: 'flex-start',
     flexDirection: 'row',
+    borderRadius: 14,
     gap: 12,
     minHeight: 136,
+    padding: 4,
     position: 'relative',
+  },
+  historyMediaRowSelected: {
+    backgroundColor: 'rgba(47, 125, 246, 0.08)',
   },
   historyPosterBox: {
     alignItems: 'center',
@@ -4776,14 +5259,42 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   historySelectCircle: {
+    alignItems: 'center',
     borderColor: COLORS.muted,
     borderRadius: 11,
     borderWidth: 2,
     height: 22,
+    justifyContent: 'center',
     position: 'absolute',
     right: 1,
     top: 58,
     width: 22,
+  },
+  historySelectCircleActive: {
+    backgroundColor: COLORS.blue,
+    borderColor: COLORS.blue,
+  },
+  historySelectIcon: {
+    color: COLORS.white,
+    height: 15,
+    width: 15,
+  },
+  historyDeleteBar: {
+    ...GLASS_PANEL_STYLE,
+    alignItems: 'center',
+    borderRadius: 18,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 2,
+    minHeight: 58,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  historyDeleteText: {
+    color: COLORS.ink,
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0,
   },
   historyEmptyPanel: {
     ...GLASS_BUTTON_STYLE,

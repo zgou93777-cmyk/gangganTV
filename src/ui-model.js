@@ -5,19 +5,19 @@ const APP_TABS = [
     id: 'discover',
     label: '发现',
     description: '点播发现、搜索和播放入口',
-    symbol: '▶',
+    icon: 'play',
   },
   {
     id: 'watching',
     label: '追剧',
     description: '最近播放和本机保存状态',
-    symbol: '♥',
+    icon: 'history',
   },
   {
     id: 'settings',
     label: '设置',
     description: '配置接口、站点和隐私说明',
-    symbol: '⚙',
+    icon: 'settings',
   },
 ];
 

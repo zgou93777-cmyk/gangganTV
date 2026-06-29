@@ -27,9 +27,10 @@ test('defines the three MiraPlay-inspired tabs in display order', () => {
   );
   assert.equal(DEFAULT_TAB_ID, 'discover');
   assert.deepEqual(
-    APP_TABS.map((tab) => tab.symbol),
-    ['▶', '♥', '⚙']
+    APP_TABS.map((tab) => tab.icon),
+    ['play', 'history', 'settings']
   );
+  assert.equal(APP_TABS.some((tab) => 'symbol' in tab), false);
 });
 
 test('defines discover content modes for the home category rail', () => {

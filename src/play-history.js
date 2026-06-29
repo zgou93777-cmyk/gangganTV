@@ -47,6 +47,18 @@ function normalizePlayHistory(history, limit = DEFAULT_HISTORY_LIMIT) {
   return normalized.slice(0, limit);
 }
 
+function deletePlayHistoryItems(history, selectedIds, limit = DEFAULT_HISTORY_LIMIT) {
+  const selectedIdSet = new Set(
+    Array.isArray(selectedIds)
+      ? selectedIds.map((id) => readableText(id)).filter(Boolean)
+      : []
+  );
+
+  return normalizePlayHistory(history, limit).filter(
+    (item) => !selectedIdSet.has(item.id)
+  );
+}
+
 function normalizePlayHistoryItem(item) {
   if (!item || typeof item !== 'object') {
     return null;
@@ -82,5 +94,6 @@ function readableText(value) {
 module.exports = {
   DEFAULT_HISTORY_LIMIT,
   addPlayHistoryItem,
+  deletePlayHistoryItems,
   normalizePlayHistory,
 };
