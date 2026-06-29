@@ -372,6 +372,16 @@ export default function App() {
     } else {
       setSelectedSiteId(firstUsableSiteId(nextSites));
     }
+
+    await warmUpRestoredPluginServer({
+      pluginServerToken: storedPluginServerToken,
+      pluginServerUrl: storedPluginServerUrl,
+      restoredPluginSource,
+      restoredPluginSite: nextSites.find(
+        (site) => site?.runtime === 'catvod-server' && site?.sourceId === restoredPluginSource?.id
+      ),
+      sites: nextSites,
+    });
   }
 
   async function playDirectUrl(type) {
@@ -1125,6 +1135,78 @@ export default function App() {
       setMessage(errorMessage);
     } finally {
       setCheckingPluginServer(false);
+    }
+  }
+
+  async function warmUpRestoredPluginServer({
+    pluginServerToken: restoredToken,
+    pluginServerUrl: restoredUrl,
+    restoredPluginSource,
+    restoredPluginSite,
+    sites: restoredSites = [],
+  } = {}) {
+    if (
+      !shouldWarmUpRestoredPluginServer({
+        pluginServerToken: restoredToken,
+        pluginServerUrl: restoredUrl,
+        restoredPluginSource,
+      })
+    ) {
+      return;
+    }
+
+    const cleanUrl = restoredUrl.trim();
+    const cleanToken = restoredToken.trim();
+    const scriptUrl = restoredPluginSite?.scriptUrl || restoredPluginSource.url;
+
+    setCheckingPluginServer(true);
+    setLoadingDiscoverFeed(true);
+    setMessage('正在加载 JS 插件和首页内容');
+
+    try {
+      const health = await fetchPluginServerHealth({
+        baseUrl: cleanUrl,
+        token: cleanToken,
+        tokenRequired: true,
+      });
+      const capabilities = health?.capabilities || {};
+      const hasPluginHomeRoutes =
+        capabilities.catvodSources === true && capabilities.catvodHome === true;
+
+      setPluginServerHealth({
+        capabilities,
+        ok: Boolean(health?.ok),
+        message: health?.ok ? '远端解析器已连接，正在加载首页内容' : '远端解析器返回异常状态',
+      });
+
+      if (!health?.ok) {
+        setMessage('远端解析器返回异常状态，请到设置页检测');
+        return;
+      }
+
+      if (!hasPluginHomeRoutes) {
+        setMessage('远端解析器版本偏旧：请重启/更新 3000 解析器后再刷新首页');
+        return;
+      }
+
+      await expandPluginServerSources(
+        {
+          ...restoredPluginSource,
+          scriptUrl,
+        },
+        scriptUrl,
+        restoredSites
+      );
+      setMessage('首页内容已开始加载');
+    } catch (warmUpError) {
+      setPluginServerHealth({
+        ok: false,
+        message: warmUpError?.message || '远端解析器自动加载失败',
+      });
+      setMessage(warmUpError?.message || '远端解析器自动加载失败');
+    } finally {
+      setCheckingPluginServer(false);
+      setLoadingDiscoverFeed(false);
     }
   }
 
@@ -3816,6 +3898,21 @@ function upsertById(items, nextItem) {
 
 function firstUsableSiteId(items) {
   return items.find((site) => site.searchable && !site.unsupportedReason)?.id || '';
+}
+
+function shouldWarmUpRestoredPluginServer({
+  pluginServerToken,
+  pluginServerUrl,
+  restoredPluginSource,
+} = {}) {
+  return Boolean(
+    typeof pluginServerUrl === 'string' &&
+      pluginServerUrl.trim() &&
+      typeof pluginServerToken === 'string' &&
+      pluginServerToken.trim() &&
+      restoredPluginSource?.kind === 'plugin' &&
+      restoredPluginSource?.url
+  );
 }
 
 function buildImageSource(uri, headers = {}) {

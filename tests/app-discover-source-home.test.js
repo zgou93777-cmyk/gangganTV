@@ -39,6 +39,13 @@ test('restored plugin sources can be expanded after parser health checks', () =>
   assert.equal(appSource.includes('远端解析器版本偏旧'), true);
 });
 
+test('app startup warms up restored CatVod plugin sources automatically', () => {
+  assert.equal(appSource.includes('await warmUpRestoredPluginServer({'), true);
+  assert.equal(appSource.includes('function shouldWarmUpRestoredPluginServer'), true);
+  assert.equal(appSource.includes('正在加载 JS 插件和首页内容'), true);
+  assert.equal(appSource.includes('启动时未自动加载源'), false);
+});
+
 test('discover loading state explains the selected remote source is loading', () => {
   assert.equal(appSource.includes('正在读取当前源首页'), false);
   assert.equal(appSource.includes('正在读取远端解析器首页'), true);
