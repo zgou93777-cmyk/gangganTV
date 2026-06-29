@@ -380,6 +380,126 @@ test('CatVodRunner falls back to the first category when bundle home has no list
   assert.match(home.list[0].vod_id, /^catvod:/);
 });
 
+test('CatVodRunner aggregates multiple categories when bundle home has no list', async () => {
+  const runner = new CatVodRunner({
+    fetchText: async () => `
+      module.exports = {
+        async start(config) {
+          const app = createCatApp({ config });
+          app.register(async (server) => {
+            server.register(async (spider) => {
+              spider.post('/home', async () => ({
+                class: [
+                  { type_id: 'hot', type_name: 'Hot' },
+                  { type_id: 'movie', type_name: 'Movie' },
+                  { type_id: 'tv', type_name: 'TV' }
+                ],
+                list: []
+              }));
+              spider.post('/category', async (request) => ({
+                list: [
+                  {
+                    vod_id: request.body.tid + '-1',
+                    vod_name: request.body.tid + ' One',
+                    vod_pic: 'https://img.example.com/' + request.body.tid + '-1.jpg'
+                  },
+                  {
+                    vod_id: request.body.tid === 'movie' ? 'hot-1' : request.body.tid + '-2',
+                    vod_name: request.body.tid + ' Two',
+                    vod_pic: 'https://img.example.com/' + request.body.tid + '-2.jpg'
+                  }
+                ]
+              }));
+            }, { prefix: '/spider/home/3' });
+            server.get('/config', async () => ({
+              video: {
+                sites: [{ key: 'nodejs_home', name: 'Home Source', api: '/spider/home/3' }]
+              }
+            }));
+          });
+          await app.ready();
+          globalThis.__catvodApp = app;
+        }
+      };
+    `,
+    timeoutMs: 3000,
+  });
+
+  const home = await runner.home({
+    scriptUrl: 'https://cat.example.com/index.js',
+    siteBasePath: '/spider/home/3',
+  });
+
+  assert.equal(home.list.length, 5);
+  assert.deepEqual(
+    home.list.map((item) => item.vod_name),
+    ['hot One', 'hot Two', 'movie One', 'tv One', 'tv Two']
+  );
+  assert.equal(home.list[0].source_name, 'Home Source');
+  assert.match(home.list[0].vod_id, /^catvod:/);
+});
+
+test('CatVodRunner fills sparse bundle home lists from categories', async () => {
+  const runner = new CatVodRunner({
+    fetchText: async () => `
+      module.exports = {
+        async start(config) {
+          const app = createCatApp({ config });
+          app.register(async (server) => {
+            server.register(async (spider) => {
+              spider.post('/home', async () => ({
+                class: [
+                  { type_id: 'hot', type_name: 'Hot' },
+                  { type_id: 'movie', type_name: 'Movie' }
+                ],
+                list: [{ vod_id: 'home-1', vod_name: 'Home One' }]
+              }));
+              spider.post('/category', async (request) => ({
+                list: request.body.page === 1
+                  ? [{ vod_id: 'home-1', vod_name: 'Duplicate Home' }]
+                  : [
+                    { vod_id: request.body.tid + '-page' + request.body.page + '-1', vod_name: request.body.tid + ' Page ' + request.body.page + ' One' },
+                    { vod_id: request.body.tid + '-page' + request.body.page + '-2', vod_name: request.body.tid + ' Page ' + request.body.page + ' Two' }
+                  ]
+              }));
+            }, { prefix: '/spider/sparse/3' });
+            server.get('/config', async () => ({
+              video: {
+                sites: [{ key: 'nodejs_sparse', name: 'Sparse Source', api: '/spider/sparse/3' }]
+              }
+            }));
+          });
+          await app.ready();
+          globalThis.__catvodApp = app;
+        }
+      };
+    `,
+    timeoutMs: 3000,
+  });
+
+  const home = await runner.home({
+    scriptUrl: 'https://cat.example.com/index.js',
+    siteBasePath: '/spider/sparse/3',
+  });
+
+  assert.deepEqual(
+    home.list.map((item) => item.vod_name),
+    [
+      'Home One',
+      'hot Page 2 One',
+      'hot Page 2 Two',
+      'hot Page 3 One',
+      'hot Page 3 Two',
+      'movie Page 2 One',
+      'movie Page 2 Two',
+      'movie Page 3 One',
+      'movie Page 3 Two'
+    ]
+  );
+  assert.equal(home.list[0].source_name, 'Sparse Source');
+  assert.match(home.list[0].vod_id, /^catvod:/);
+});
+
 test('CatVodRunner gives start plugins an in-memory host instead of opening a port', async () => {
   const runner = new CatVodRunner({
     fetchText: async () => `

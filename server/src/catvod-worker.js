@@ -1,5 +1,8 @@
 const vm = require('node:vm');
 
+const HOME_FALLBACK_LIMIT = 30;
+const HOME_FALLBACK_MAX_CATEGORY_PAGES = 3;
+
 process.on('message', async (message) => {
   try {
     const value = await executePlugin(message || {});
@@ -453,41 +456,91 @@ function wrapBundleResult(method, value, siteBasePath, site = null) {
 }
 
 async function loadCategoryHomeFallback({ injectJson, site, siteBasePath, value }) {
-  if ((value?.list || []).length) {
+  const baseList = Array.isArray(value?.list) ? value.list : [];
+
+  if (baseList.length >= HOME_FALLBACK_LIMIT) {
     return value;
   }
 
-  const firstCategory = Array.isArray(value?.class)
-    ? value.class.find((category) => category?.type_id || category?.typeId || category?.id)
-    : null;
-  const typeId = firstCategory?.type_id || firstCategory?.typeId || firstCategory?.id;
+  const categories = Array.isArray(value?.class)
+    ? value.class.filter((category) => category?.type_id || category?.typeId || category?.id)
+    : [];
 
-  if (!typeId) {
+  if (!categories.length) {
     return value;
   }
 
-  try {
-    const categoryValue = await injectJson({
-      ...routeRequest('category', {
-        extend: {},
-        page: 1,
-        tid: typeId,
-      }),
-      path: `${siteBasePath}/category`,
-    });
+  const list = [...baseList];
+  const seenIds = new Set();
 
-    return {
-      ...value,
-      ...categoryValue,
-      class: value.class,
-      filters: value.filters,
-      source_api: siteBasePath,
-      source_key: site?.key || '',
-      source_name: site?.name || site?.key || siteBasePath,
-    };
-  } catch {
+  for (const item of list) {
+    const itemId = String(item?.vod_id || item?.id || item?.vod_name || '');
+
+    if (itemId) {
+      seenIds.add(itemId);
+    }
+  }
+
+  for (const category of categories) {
+    const typeId = category?.type_id || category?.typeId || category?.id;
+
+    for (let page = 1; page <= HOME_FALLBACK_MAX_CATEGORY_PAGES; page += 1) {
+      try {
+        const categoryValue = await injectJson({
+          ...routeRequest('category', {
+            extend: {},
+            page,
+            tid: typeId,
+          }),
+          path: `${siteBasePath}/category`,
+        });
+        const categoryList = categoryValue?.list || [];
+
+        if (!categoryList.length) {
+          break;
+        }
+
+        for (const item of categoryList) {
+          const itemId = String(item?.vod_id || item?.id || item?.vod_name || '');
+
+          if (!itemId || seenIds.has(itemId)) {
+            continue;
+          }
+
+          seenIds.add(itemId);
+          list.push(item);
+
+          if (list.length >= HOME_FALLBACK_LIMIT) {
+            break;
+          }
+        }
+
+        if (list.length >= HOME_FALLBACK_LIMIT) {
+          break;
+        }
+      } catch {
+        break;
+      }
+    }
+
+    if (list.length >= HOME_FALLBACK_LIMIT) {
+      break;
+    }
+  }
+
+  if (!list.length) {
     return value;
   }
+
+  return {
+    ...value,
+    list,
+    class: value.class,
+    filters: value.filters,
+    source_api: siteBasePath,
+    source_key: site?.key || '',
+    source_name: site?.name || site?.key || siteBasePath,
+  };
 }
 
 function unwrapBundlePayload(method, payload, fallbackSiteBasePath) {
