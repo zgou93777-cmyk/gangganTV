@@ -172,6 +172,43 @@ test('normalizes a selected search result into detail view data', () => {
   assert.equal(detail.sourceName, '瓜子');
 });
 
+test('normalizes detail cast and director fields for the poster page', () => {
+  const detail = buildPosterDetailModel(
+    { name: '痴迷' },
+    {
+      vod_actor: 'Michael Johnston, Inde Navarrette / Cooper Tomlinson',
+      vod_director: 'David M. Parks',
+    }
+  );
+
+  assert.deepEqual(detail.cast, [
+    {
+      id: 'cast-0-David M. Parks',
+      name: 'David M. Parks',
+      role: '导演',
+      avatar: '',
+    },
+    {
+      id: 'cast-1-Michael Johnston',
+      name: 'Michael Johnston',
+      role: '演员',
+      avatar: '',
+    },
+    {
+      id: 'cast-2-Inde Navarrette',
+      name: 'Inde Navarrette',
+      role: '演员',
+      avatar: '',
+    },
+    {
+      id: 'cast-3-Cooper Tomlinson',
+      name: 'Cooper Tomlinson',
+      role: '演员',
+      avatar: '',
+    },
+  ]);
+});
+
 test('returns the requested tab or falls back to discover', () => {
   assert.equal(getTabById('watching').label, '追剧');
   assert.equal(getTabById('missing').id, DEFAULT_TAB_ID);

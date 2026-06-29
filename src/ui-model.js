@@ -324,6 +324,7 @@ function buildPosterDetailModel(result = {}, detail = {}) {
     readableText(source.remarks) ||
     readableText(source.vod_remarks);
   const metaLine = [year, type, duration].filter(Boolean).join(' · ');
+  const cast = buildDetailCast(source);
 
   return {
     id: readableText(source.id) || readableText(source.vod_id) || title,
@@ -337,9 +338,74 @@ function buildPosterDetailModel(result = {}, detail = {}) {
       readableText(source.desc) ||
       readableText(source.vod_content) ||
       '暂无简介',
+    cast,
     metaLine,
     raw: source,
   };
+}
+
+function buildDetailCast(source = {}) {
+  const directors = splitPeopleText(
+    source.director || source.vod_director || source.vodDirector
+  ).map((person) => ({
+    ...person,
+    role: person.role || '导演',
+  }));
+  const actors = [
+    ...parsePeopleList(source.cast),
+    ...parsePeopleList(source.actors),
+    ...splitPeopleText(source.actor || source.vod_actor || source.vodActor),
+  ].map((person) => ({
+    ...person,
+    role: person.role || '演员',
+  }));
+
+  return [...directors, ...actors]
+    .filter((person) => person.name)
+    .filter(dedupePerson)
+    .slice(0, 12)
+    .map((person, index) => ({
+      id: `cast-${index}-${person.name}`,
+      name: person.name,
+      role: person.role,
+      avatar: person.avatar || '',
+    }));
+}
+
+function parsePeopleList(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === 'string') {
+          return { name: readableText(item), role: '', avatar: '' };
+        }
+
+        return {
+          name: readableText(item?.name || item?.actor || item?.vod_actor),
+          role: readableText(item?.role || item?.character || item?.job),
+          avatar: readableText(item?.avatar || item?.pic || item?.photo || item?.image),
+        };
+      })
+      .filter((person) => person.name);
+  }
+
+  return splitPeopleText(value);
+}
+
+function splitPeopleText(value) {
+  return readableText(value)
+    .split(/[、,，/|]+/)
+    .map((name) => readableText(name))
+    .filter(Boolean)
+    .map((name) => ({
+      avatar: '',
+      name,
+      role: '',
+    }));
+}
+
+function dedupePerson(person, index, items) {
+  return items.findIndex((item) => item.name === person.name && item.role === person.role) === index;
 }
 
 function readableText(value) {

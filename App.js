@@ -369,8 +369,11 @@ export default function App() {
 
     if (nextSites.some((site) => site.id === storedSelectedSiteId)) {
       setSelectedSiteId(storedSelectedSiteId);
+      setSelectedSearchSourceIds([storedSelectedSiteId]);
     } else {
-      setSelectedSiteId(firstUsableSiteId(nextSites));
+      const firstSiteId = firstUsableSiteId(nextSites);
+      setSelectedSiteId(firstSiteId);
+      setSelectedSearchSourceIds(firstSiteId ? [firstSiteId] : []);
     }
 
     await warmUpRestoredPluginServer({
@@ -642,7 +645,6 @@ export default function App() {
         sourceName: source.name,
       }));
       const nextState = replaceWithSingleSource({
-        selectedSearchSourceIds: [],
         source,
         sites: importedSites,
       });
@@ -671,6 +673,7 @@ export default function App() {
 
   async function selectSite(site) {
     setSelectedSiteId(site.id);
+    setSelectedSearchSourceIds([site.id]);
     setSelectedResult(null);
     setSelectedDetail(null);
     setSearchResults([]);
@@ -793,6 +796,7 @@ export default function App() {
     }
 
     setSelectedSiteId(nextSelectedSiteId);
+    setSelectedSearchSourceIds([nextSelectedSiteId]);
     setSearchResults([]);
     setSearchFailures([]);
     setSelectedResult(null);
@@ -934,6 +938,7 @@ export default function App() {
     setCatVodExecutorHtml(buildCatVodExecutorHtml(scriptText));
     setSites(nextSites);
     setSelectedSiteId(runtimeSite.id);
+    setSelectedSearchSourceIds([runtimeSite.id]);
     setActiveTab('discover');
     saveJson(STORAGE_KEYS.sites, nextSites).catch(() =>
       setMessage('插件执行器站点保存失败')
@@ -976,6 +981,7 @@ export default function App() {
     });
     setSites(nextSites);
     setSelectedSiteId(serverSite.id);
+    setSelectedSearchSourceIds([serverSite.id]);
     setActiveTab('discover');
     saveJson(STORAGE_KEYS.sites, nextSites).catch(() =>
       setMessage('远端解析器站点保存失败')
@@ -1020,7 +1026,7 @@ export default function App() {
       });
       setSites(nextSites);
       setSelectedSiteId(firstSite.id);
-      setSelectedSearchSourceIds(serverSites.map((site) => site.id));
+      setSelectedSearchSourceIds([firstSite.id]);
       setActiveTab('discover');
       saveJson(STORAGE_KEYS.sites, nextSites).catch(() =>
         setMessage('远端解析器站点保存失败')
@@ -1028,7 +1034,7 @@ export default function App() {
       AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, firstSite.id).catch(() =>
         setMessage('默认站点保存失败')
       );
-      setMessage(`已加载 ${serverSites.length} 个插件内部来源`);
+      setMessage(`已加载 ${serverSites.length} 个插件内部来源，默认只搜索当前来源`);
     } catch (sourceError) {
       setMessage(sourceError?.message || '插件内部来源读取失败，已保留总源');
       loadPluginServerSite(source, scriptUrl);
@@ -2659,7 +2665,7 @@ export default function App() {
                 <View style={styles.searchEmptyState}>
                   <Text style={styles.sectionTitle}>输入关键词开始搜索</Text>
                   <Text style={styles.sectionHint}>
-                    默认搜索全部可用来源，可在右上角筛选配置源。
+                    默认只搜索当前来源，可在右上角临时增加更多来源。
                   </Text>
                 </View>
               ) : null
@@ -2677,7 +2683,9 @@ export default function App() {
 
     const activeIds = selectedSearchSourceIds.length
       ? selectedSearchSourceIds
-      : sites.map((site) => site.id);
+      : selectedSiteId
+      ? [selectedSiteId]
+      : sites.slice(0, 1).map((site) => site.id);
 
     return (
       <View style={styles.overlayBackdrop}>
@@ -2690,7 +2698,7 @@ export default function App() {
           <View style={styles.overlayHandle} />
           <Text style={styles.searchOverlayTitle}>选择配置源</Text>
           <Text style={styles.sectionHint}>
-            默认搜索全部可用来源；取消勾选后只搜索保留的来源。
+            默认只搜索当前来源；勾选更多来源后会一起搜索，速度会变慢。
           </Text>
           <ScrollView
             contentContainerStyle={styles.sourceFilterList}
@@ -2709,10 +2717,19 @@ export default function App() {
                       setSelectedSearchSourceIds((currentIds) => {
                         const baseIds = currentIds.length
                           ? currentIds
+                          : selectedSiteId
+                          ? [selectedSiteId]
                           : sites.map((item) => item.id);
 
                         if (baseIds.includes(site.id)) {
-                          return baseIds.filter((id) => id !== site.id);
+                          const nextIds = baseIds.filter((id) => id !== site.id);
+
+                          if (!nextIds.length) {
+                            setMessage('至少保留一个搜索来源');
+                            return baseIds;
+                          }
+
+                          return nextIds;
                         }
 
                         return [...baseIds, site.id];
@@ -2842,6 +2859,43 @@ export default function App() {
           <Text numberOfLines={4} style={styles.detailDescription}>
             {loadingDetailId ? '正在读取详情和播放列表...' : selectedPosterDetail.description}
           </Text>
+
+          {selectedPosterDetail.cast?.length ? (
+            <View style={styles.detailCastSection}>
+              <Text style={styles.detailSectionTitle}>演职人员</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.detailCastScroller}
+              >
+                <View style={styles.detailCastRail}>
+                  {selectedPosterDetail.cast.map((person) => (
+                    <View key={person.id} style={styles.detailCastCard}>
+                      <View style={styles.detailCastAvatar}>
+                        {person.avatar ? (
+                          <Image
+                            resizeMode="cover"
+                            source={{ uri: person.avatar }}
+                            style={styles.detailCastAvatarImage}
+                          />
+                        ) : (
+                          <Text style={styles.detailCastInitial}>
+                            {person.name.slice(0, 1)}
+                          </Text>
+                        )}
+                      </View>
+                      <Text numberOfLines={1} style={styles.detailCastName}>
+                        {person.name}
+                      </Text>
+                      <Text numberOfLines={1} style={styles.detailCastRole}>
+                        {person.role}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+          ) : null}
 
           <View style={styles.detailLineHeader}>
             <Text style={styles.detailLineTitle}>
@@ -5324,6 +5378,62 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0,
     lineHeight: 25,
+  },
+  detailCastSection: {
+    gap: 12,
+  },
+  detailSectionTitle: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  detailCastScroller: {
+    marginHorizontal: -22,
+  },
+  detailCastRail: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 22,
+  },
+  detailCastCard: {
+    gap: 8,
+    width: 86,
+  },
+  detailCastAvatar: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    borderColor: 'rgba(255, 255, 255, 0.24)',
+    borderRadius: 18,
+    borderWidth: 1,
+    height: 86,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    width: 86,
+  },
+  detailCastAvatarImage: {
+    height: '100%',
+    width: '100%',
+  },
+  detailCastInitial: {
+    color: '#ffffff',
+    fontSize: 30,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  detailCastName: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0,
+    textAlign: 'center',
+  },
+  detailCastRole: {
+    color: 'rgba(255, 255, 255, 0.58)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0,
+    textAlign: 'center',
   },
   detailLineHeader: {
     alignItems: 'center',

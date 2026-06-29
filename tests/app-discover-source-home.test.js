@@ -25,9 +25,11 @@ test('discover source feed reloads when category and filters change', () => {
   assert.equal(appSource.includes('buildDiscoverCategoryRequest({'), true);
 });
 
-test('CatVod plugin sources are expanded for incremental search targets', () => {
+test('CatVod plugin sources are expanded but default search stays on the first source', () => {
   assert.equal(appSource.includes('name: childName || fallbackName'), true);
-  assert.equal(appSource.includes('setSelectedSearchSourceIds(serverSites.map'), true);
+  assert.equal(appSource.includes('setSelectedSearchSourceIds(serverSites.map'), false);
+  assert.equal(appSource.includes('setSelectedSearchSourceIds([firstSite.id])'), true);
+  assert.equal(appSource.includes('默认只搜索当前来源'), true);
   assert.equal(appSource.includes('await expandPluginServerSources(catVodSource, scriptUrl)'), true);
 });
 

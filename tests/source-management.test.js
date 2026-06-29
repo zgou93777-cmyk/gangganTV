@@ -144,6 +144,32 @@ test('replaceWithSingleSource keeps only the imported source and its sites', () 
   assert.deepEqual(result.selectedSearchSourceIds, ['new-site']);
 });
 
+test('replaceWithSingleSource defaults search to the first usable imported site', () => {
+  const result = replaceWithSingleSource({
+    source: {
+      id: 'new-source',
+      name: 'New Source',
+      url: 'https://example.com/new.json',
+    },
+    sites: [
+      {
+        id: 'blocked-site',
+        searchable: true,
+        sourceId: 'new-source',
+        unsupportedReason: 'not ready',
+      },
+      {
+        id: 'usable-site',
+        searchable: true,
+        sourceId: 'new-source',
+      },
+    ],
+  });
+
+  assert.equal(result.selectedSiteId, 'usable-site');
+  assert.deepEqual(result.selectedSearchSourceIds, ['usable-site']);
+});
+
 test('replaceWithSingleSource clears selection when the new source has no usable site', () => {
   const result = replaceWithSingleSource({
     selectedSearchSourceIds: ['old-site'],

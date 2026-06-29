@@ -74,11 +74,16 @@ function replaceWithSingleSource({
   const nextSelectedSiteId = nextSites.some((site) => site?.id === selectedSiteId)
     ? selectedSiteId
     : firstUsableSiteId(nextSites);
+  const nextSelectedSearchSourceIds = selectedSearchSourceIds.filter((id) =>
+    nextSites.some((site) => site?.id === id)
+  );
 
   return {
-    selectedSearchSourceIds: selectedSearchSourceIds.filter((id) =>
-      nextSites.some((site) => site?.id === id)
-    ),
+    selectedSearchSourceIds: nextSelectedSearchSourceIds.length
+      ? nextSelectedSearchSourceIds
+      : nextSelectedSiteId
+      ? [nextSelectedSiteId]
+      : [],
     selectedSiteId: nextSelectedSiteId,
     sources: nextSources,
     sites: nextSites,

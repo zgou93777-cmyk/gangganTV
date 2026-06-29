@@ -40,3 +40,13 @@ test('search loading copy explains incremental remote source progress', () => {
   assert.equal(appSource.includes('已返回的海报会先显示，剩余来源继续搜索'), true);
   assert.equal(appSource.includes('正在搜索真实来源'), true);
 });
+
+test('search defaults to the current source instead of scanning every expanded source', () => {
+  assert.equal(appSource.includes('setSelectedSearchSourceIds(serverSites.map'), false);
+  assert.equal(appSource.includes('setSelectedSearchSourceIds([firstSite.id])'), true);
+  assert.equal(appSource.includes('setSelectedSearchSourceIds([site.id])'), true);
+  assert.equal(appSource.includes('setSelectedSearchSourceIds([nextSelectedSiteId])'), true);
+  assert.equal(appSource.includes('默认只搜索当前来源'), true);
+  assert.equal(appSource.includes('至少保留一个搜索来源'), true);
+  assert.equal(appSource.includes('默认搜索全部可用来源'), false);
+});
