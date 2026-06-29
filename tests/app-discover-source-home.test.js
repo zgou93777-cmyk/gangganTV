@@ -1,0 +1,20 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+
+const appSource = fs.readFileSync(path.join(__dirname, '..', 'App.js'), 'utf8');
+
+test('discover page can render homepage posters from the selected source', () => {
+  assert.equal(appSource.includes('sourceDiscoverPosters'), true);
+  assert.equal(appSource.includes('loadSourceDiscoverFeed'), true);
+});
+
+test('main shell uses compact top padding instead of the full safe area spacer', () => {
+  const stylesStart = appSource.indexOf('scrollContent: {');
+  const stylesEnd = appSource.indexOf('header: {', stylesStart);
+  const scrollContentStyle = appSource.slice(stylesStart, stylesEnd);
+
+  assert.equal(scrollContentStyle.includes('paddingTop: TOP_SAFE_PADDING'), false);
+  assert.equal(scrollContentStyle.includes('paddingTop: COMPACT_TOP_PADDING'), true);
+});

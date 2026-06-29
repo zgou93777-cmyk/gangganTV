@@ -28,6 +28,7 @@ const {
 const {
   fetchTvBoxConfig,
   fetchTvBoxDetail,
+  fetchTvBoxHome,
   fetchTvBoxSearch,
   isBuiltInMockConfigUrl,
   resolveTvBoxEpisode,
@@ -40,6 +41,7 @@ const {
   DISCOVER_SORT_FILTERS,
   buildDiscoverPosterFeed,
   buildPosterDetailModel,
+  buildSourceDiscoverPosterFeed,
   buildVodResultCards,
   buildWatchingSummary,
   getTabById,
@@ -127,6 +129,11 @@ const TOP_SAFE_PADDING = Platform.select({
   android: (NativeStatusBar.currentHeight || 0) + 18,
   default: 36,
 });
+const COMPACT_TOP_PADDING = Platform.select({
+  ios: 18,
+  android: 12,
+  default: 12,
+});
 
 const STORAGE_KEYS = {
   vod: 'iptv.prototype.recentVodUrl',
@@ -171,6 +178,8 @@ export default function App() {
   const [searchHistory, setSearchHistory] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
   const [searchFailures, setSearchFailures] = useState([]);
+  const [sourceDiscoverResults, setSourceDiscoverResults] = useState([]);
+  const [loadingDiscoverFeed, setLoadingDiscoverFeed] = useState(false);
   const [activeSearchBucketId, setActiveSearchBucketId] = useState('all');
   const [selectedResult, setSelectedResult] = useState(null);
   const [selectedDetail, setSelectedDetail] = useState(null);
@@ -223,7 +232,7 @@ export default function App() {
 
   const activeTabMeta = useMemo(() => getTabById(activeTab), [activeTab]);
   const currentLabel = useMemo(() => LABELS[activeType] || '播放', [activeType]);
-  const discoverPosterFeed = useMemo(() => buildDiscoverPosterFeed(), []);
+  const demoDiscoverPosterFeed = useMemo(() => buildDiscoverPosterFeed(), []);
   const searchBuckets = useMemo(
     () =>
       buildSearchBuckets({
@@ -241,6 +250,16 @@ export default function App() {
     () => buildVodResultCards(visibleSearchResults),
     [visibleSearchResults]
   );
+  const sourceDiscoverPosters = useMemo(
+    () =>
+      buildSourceDiscoverPosterFeed(sourceDiscoverResults, {
+        sourceName: selectedSite?.name || '',
+      }),
+    [selectedSite?.name, sourceDiscoverResults]
+  );
+  const discoverPosterFeed = sourceDiscoverPosters.length
+    ? sourceDiscoverPosters
+    : demoDiscoverPosterFeed;
   const selectedPosterDetail = useMemo(
     () => buildPosterDetailModel(selectedResult, selectedDetail),
     [selectedDetail, selectedResult]
@@ -269,6 +288,16 @@ export default function App() {
       setMessage('读取本地数据失败');
     });
   }, []);
+
+  useEffect(() => {
+    if (activePage !== 'discover' || activeTab !== 'discover') {
+      return;
+    }
+
+    loadSourceDiscoverFeed().catch(() => {
+      setSourceDiscoverResults([]);
+    });
+  }, [activePage, activeTab, selectedSiteId, sites]);
 
   useEffect(() => {
     if (error?.message) {
@@ -1301,6 +1330,24 @@ export default function App() {
     return fetchTvBoxSearch(site, keyword);
   }
 
+  async function loadSourceDiscoverFeed() {
+    if (!selectedSite || isTvBoxSpiderSite(selectedSite) || isPluginServerSite(selectedSite)) {
+      setSourceDiscoverResults([]);
+      return;
+    }
+
+    setLoadingDiscoverFeed(true);
+
+    try {
+      const results = await fetchTvBoxHome(selectedSite);
+      setSourceDiscoverResults(results.slice(0, 30));
+    } catch {
+      setSourceDiscoverResults([]);
+    } finally {
+      setLoadingDiscoverFeed(false);
+    }
+  }
+
   function buildTvBoxServerConfig(site) {
     if (!pluginServerUrl.trim()) {
       throw new Error('请先在设置里填写解析服务地址');
@@ -1845,6 +1892,9 @@ export default function App() {
       <View style={styles.discoverFeed}>
         {renderDiscoverFeedRail()}
         {renderDiscoverFilters()}
+        {loadingDiscoverFeed ? (
+          <Text style={styles.sectionHint}>正在读取当前源首页</Text>
+        ) : null}
         {renderDiscoverPosterGrid()}
       </View>
     );
@@ -2739,6 +2789,7 @@ export default function App() {
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.header}>
+              {activeTab === 'discover' ? (
               <View style={styles.topChrome}>
                 {renderSourceSelector()}
                 <View style={styles.headerActions}>
@@ -2771,6 +2822,7 @@ export default function App() {
                   </Pressable>
                 </View>
               </View>
+              ) : null}
               {activeTab === 'settings' || activeTab === 'watching' ? (
                 <View style={styles.titleBlock}>
                   <Text style={styles.title}>{activeTabMeta.label}</Text>
@@ -2778,47 +2830,6 @@ export default function App() {
                 </View>
               ) : null}
             </View>
-
-            {activeTab !== 'discover' && currentUrl ? (
-              <>
-                <View style={styles.playerShell}>
-                  <VideoView
-                    allowsFullscreen
-                    allowsPictureInPicture
-                    contentFit="contain"
-                    nativeControls
-                    player={player}
-                    style={styles.video}
-                  />
-                </View>
-
-                <View style={styles.statusPanel}>
-                  <View style={styles.statusItem}>
-                    <Text style={styles.statusLabel}>当前</Text>
-                    <Text style={styles.statusValue}>{currentLabel}</Text>
-                  </View>
-                  <View style={styles.statusDivider} />
-                  <View style={styles.statusMessageGroup}>
-                    <Text style={styles.statusLabel}>状态</Text>
-                    <Text selectable style={styles.statusValue}>
-                      {message}
-                    </Text>
-                  </View>
-                </View>
-              </>
-            ) : activeTab !== 'discover' ? (
-              <View style={styles.idleStatusPanel}>
-                <View style={styles.idleStatusIconWrap}>
-                  <Icon name="play" style={styles.idleStatusIcon} />
-                </View>
-                <View style={styles.rowMain}>
-                  <Text style={styles.idleStatusTitle}>等待播放</Text>
-                  <Text selectable style={styles.idleStatusText}>
-                    {message}
-                  </Text>
-                </View>
-              </View>
-            ) : null}
 
             {renderActiveTab()}
           </ScrollView>
@@ -3903,7 +3914,7 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
     paddingBottom: 118,
-    paddingTop: TOP_SAFE_PADDING,
+    paddingTop: COMPACT_TOP_PADDING,
   },
   header: {
     gap: 10,

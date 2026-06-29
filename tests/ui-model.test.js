@@ -70,6 +70,36 @@ test('builds demo discover posters with stable card fields', () => {
   ]);
 });
 
+test('builds source discover posters from imported source results', () => {
+  const posters = uiModel.buildSourceDiscoverPosterFeed(
+    [
+      {
+        id: 'movie-1',
+        name: 'Source Movie',
+        poster: 'https://img.example.com/1.jpg',
+        remarks: '更新至 8 集',
+      },
+    ],
+    { sourceName: '瓜子秒播' }
+  );
+
+  assert.deepEqual(posters, [
+    {
+      id: 'movie-1',
+      title: 'Source Movie',
+      subtitle: '瓜子秒播 · 更新至 8 集',
+      rating: '',
+      poster: 'https://img.example.com/1.jpg',
+      raw: {
+        id: 'movie-1',
+        name: 'Source Movie',
+        poster: 'https://img.example.com/1.jpg',
+        remarks: '更新至 8 集',
+      },
+    },
+  ]);
+});
+
 test('normalizes a selected search result into detail view data', () => {
   const detail = buildPosterDetailModel({
     name: '痴迷',

@@ -298,6 +298,12 @@ function buildTvBoxSearchUrl(site, keyword) {
   return parsedUrl.toString();
 }
 
+function buildTvBoxHomeUrl(site) {
+  const parsedUrl = new URL(site.api);
+  parsedUrl.searchParams.set('ac', 'videolist');
+  return parsedUrl.toString();
+}
+
 function buildTvBoxDetailUrl(site, id) {
   const parsedUrl = new URL(site.api);
   parsedUrl.searchParams.set('ac', 'videolist');
@@ -483,6 +489,7 @@ function readableText(value) {
 module.exports = {
   buildConfigDiagnostics,
   buildTvBoxDetailUrl,
+  buildTvBoxHomeUrl,
   buildTvBoxSearchUrl,
   classifySourceUrl,
   extractPlayableUrl,

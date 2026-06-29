@@ -196,6 +196,31 @@ function buildDiscoverPosterFeed() {
   return DEMO_DISCOVER_POSTERS.map((poster) => ({ ...poster }));
 }
 
+function buildSourceDiscoverPosterFeed(results = [], { sourceName = '' } = {}) {
+  return (Array.isArray(results) ? results : [])
+    .map((result, index) => {
+      const id = readableText(result?.id) || `source-poster-${index + 1}`;
+      const title = readableText(result?.name) || readableText(result?.title);
+
+      if (!id || !title) {
+        return null;
+      }
+
+      const remarks = readableText(result?.remarks);
+      const subtitle = [readableText(sourceName), remarks].filter(Boolean).join(' · ');
+
+      return {
+        id,
+        title,
+        subtitle,
+        rating: '',
+        poster: readableText(result?.poster),
+        raw: result,
+      };
+    })
+    .filter(Boolean);
+}
+
 function buildPosterDetailModel(result = {}, detail = {}) {
   const source = {
     ...result,
@@ -259,6 +284,7 @@ module.exports = {
   DISCOVER_SORT_FILTERS,
   buildDiscoverPosterFeed,
   buildPosterDetailModel,
+  buildSourceDiscoverPosterFeed,
   buildVodResultCards,
   buildWatchingSummary,
   getTabById,

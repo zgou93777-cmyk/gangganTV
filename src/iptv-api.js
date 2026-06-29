@@ -1,5 +1,6 @@
 const {
   buildTvBoxDetailUrl,
+  buildTvBoxHomeUrl,
   buildTvBoxSearchUrl,
   extractPlayableUrl,
   isValidHttpUrl,
@@ -110,6 +111,17 @@ async function fetchTvBoxSearch(site, keyword, fetchImpl = fetch) {
   }
 
   const json = await fetchJson(buildTvBoxSearchUrl(site, cleanKeyword), fetchImpl);
+  return normalizeSearchResponse(json);
+}
+
+async function fetchTvBoxHome(site, fetchImpl = fetch) {
+  ensureSearchableSite(site);
+
+  if (isBuiltInMockSite(site)) {
+    return normalizeSearchResponse(BUILT_IN_MOCK_SEARCH_RESPONSE);
+  }
+
+  const json = await fetchJson(buildTvBoxHomeUrl(site), fetchImpl);
   return normalizeSearchResponse(json);
 }
 
@@ -254,6 +266,7 @@ module.exports = {
   fetchM3uPlaylist,
   fetchTvBoxConfig,
   fetchTvBoxDetail,
+  fetchTvBoxHome,
   fetchTvBoxSearch,
   isBuiltInMockConfigUrl,
   isBuiltInMockLivePlaylistUrl,

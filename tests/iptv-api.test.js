@@ -4,6 +4,7 @@ const test = require('node:test');
 const {
   fetchTvBoxConfig,
   fetchTvBoxDetail,
+  fetchTvBoxHome,
   fetchTvBoxSearch,
   fetchM3uPlaylist,
   isBuiltInMockConfigUrl,
@@ -90,6 +91,38 @@ test('fetchTvBoxSearch returns normalized search results', async () => {
 
   assert.deepEqual(results, [
     { id: 'movie-1', name: '三体', poster: '', remarks: '' },
+  ]);
+});
+
+test('fetchTvBoxHome loads source homepage lists without a keyword', async () => {
+  const site = {
+    api: 'https://api.example.com/tvbox',
+    name: 'Demo API',
+    searchable: true,
+    unsupportedReason: '',
+  };
+
+  const results = await fetchTvBoxHome(site, async (url) => {
+    assert.equal(url, 'https://api.example.com/tvbox?ac=videolist');
+    return jsonResponse({
+      list: [
+        {
+          vod_id: 'home-1',
+          vod_name: 'Home Movie',
+          vod_pic: 'https://img.example.com/home.jpg',
+          vod_remarks: 'Source hot',
+        },
+      ],
+    });
+  });
+
+  assert.deepEqual(results, [
+    {
+      id: 'home-1',
+      name: 'Home Movie',
+      poster: 'https://img.example.com/home.jpg',
+      remarks: 'Source hot',
+    },
   ]);
 });
 
