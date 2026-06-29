@@ -44,6 +44,15 @@ function createParserServer(options = {}) {
       scriptUrl: request.body?.scriptUrl,
     })
   ));
+  routes.set('POST /catvod/search-batch', withAuth(token, async (request) =>
+    runner.searchBatch({
+      keyword: String(request.body?.keyword || request.body?.wd || '').trim(),
+      scriptUrl: request.body?.scriptUrl,
+      siteBasePaths: Array.isArray(request.body?.siteBasePaths)
+        ? request.body.siteBasePaths
+        : [],
+    })
+  ));
   routes.set('POST /catvod/sources', withAuth(token, async (request) =>
     runner.sources({
       scriptUrl: request.body?.scriptUrl,

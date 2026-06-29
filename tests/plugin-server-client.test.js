@@ -8,6 +8,7 @@ const {
   fetchPluginServerHome,
   fetchPluginServerPlay,
   fetchPluginServerSearch,
+  fetchPluginServerSearchBatch,
   fetchPluginServerSources,
 } = require('../src/plugin-server-client');
 
@@ -71,6 +72,80 @@ test('fetchPluginServerSearch posts script and keyword then normalizes results',
   assert.deepEqual(results, [
     { id: 'movie-1', name: '三体', poster: '', remarks: '' },
   ]);
+});
+
+test('fetchPluginServerSearchBatch posts selected source paths and normalizes per-source results', async () => {
+  const calls = [];
+  const result = await fetchPluginServerSearchBatch(
+    {
+      baseUrl: 'https://parser.example.com',
+      token: 'secret-token',
+      scriptUrl: 'https://cat.example.com/index.js',
+    },
+    {
+      keyword: '剑来',
+      siteBasePaths: ['/spider/one/3', '/spider/two/3'],
+    },
+    async (url, options) => {
+      calls.push({
+        body: JSON.parse(options.body),
+        headers: options.headers,
+        url,
+      });
+      return jsonResponse({
+        failures: [
+          {
+            message: 'timeout',
+            siteBasePath: '/spider/two/3',
+            sourceName: '二号源',
+          },
+        ],
+        results: [
+          {
+            list: [{ vod_id: 'one-1', vod_name: '剑来' }],
+            siteBasePath: '/spider/one/3',
+            sourceName: '一号源',
+          },
+        ],
+      });
+    }
+  );
+
+  assert.deepEqual(calls, [
+    {
+      body: {
+        keyword: '剑来',
+        scriptUrl: 'https://cat.example.com/index.js',
+        siteBasePaths: ['/spider/one/3', '/spider/two/3'],
+      },
+      headers: {
+        Accept: 'application/json, text/plain;q=0.9, */*;q=0.8',
+        Authorization: 'Bearer secret-token',
+        'Content-Type': 'application/json',
+      },
+      url: 'https://parser.example.com/catvod/search-batch',
+    },
+  ]);
+  assert.deepEqual(result, {
+    failures: [
+      {
+        message: 'timeout',
+        siteBasePath: '/spider/two/3',
+        sourceName: '二号源',
+      },
+    ],
+    results: [
+      {
+        id: 'one-1',
+        name: '剑来',
+        poster: '',
+        remarks: '',
+        sourceApi: '/spider/one/3',
+        sourceId: '/spider/one/3',
+        sourceName: '一号源',
+      },
+    ],
+  });
 });
 
 test('fetchPluginServerSources and home expose CatVod bundle source metadata', async () => {
@@ -306,6 +381,39 @@ test('plugin server client requires a token when tokenRequired is enabled', asyn
       ),
     /Token/
   );
+});
+
+test('plugin server client can call a local parser without a token', async () => {
+  const calls = [];
+  const results = await fetchPluginServerSearch(
+    {
+      baseUrl: 'http://192.168.1.20:3000',
+      scriptUrl: 'https://cat.example.com/index.js',
+      siteBasePath: '/spider/local/3',
+    },
+    '剑来',
+    async (url, options) => {
+      calls.push({
+        body: JSON.parse(options.body),
+        headers: options.headers,
+        url,
+      });
+      return jsonResponse({
+        list: [{ vod_id: 'local-1', vod_name: '剑来' }],
+      });
+    }
+  );
+
+  assert.equal(calls[0].url, 'http://192.168.1.20:3000/catvod/search');
+  assert.equal(Object.hasOwn(calls[0].headers, 'Authorization'), false);
+  assert.deepEqual(calls[0].body, {
+    keyword: '剑来',
+    scriptUrl: 'https://cat.example.com/index.js',
+    siteBasePath: '/spider/local/3',
+  });
+  assert.deepEqual(results, [
+    { id: 'local-1', name: '剑来', poster: '', remarks: '' },
+  ]);
 });
 
 function jsonResponse(body, status = 200) {

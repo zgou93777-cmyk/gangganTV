@@ -19,6 +19,10 @@ class CatVodRunner {
     return this.call('search', payload);
   }
 
+  async searchBatch(payload) {
+    return this.call('searchBatch', payload);
+  }
+
   async sources(payload) {
     return this.call('sources', payload);
   }

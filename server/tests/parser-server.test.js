@@ -89,6 +89,72 @@ test('server accepts bearer token and forwards CatVod search requests to runner'
   ]);
 });
 
+test('server forwards CatVod batch search requests to runner once', async () => {
+  const calls = [];
+  const server = createParserServer({
+    runner: {
+      async searchBatch(payload) {
+        calls.push(payload);
+        return {
+          failures: [
+            {
+              message: 'timeout',
+              siteBasePath: '/spider/two/3',
+              sourceName: '二号源',
+            },
+          ],
+          results: [
+            {
+              list: [{ vod_id: 'movie-1', vod_name: payload.keyword }],
+              siteBasePath: '/spider/one/3',
+              sourceName: '一号源',
+            },
+          ],
+        };
+      },
+    },
+    token: 'secret-token',
+  });
+
+  const response = await server.inject({
+    body: {
+      keyword: 'Sintel',
+      scriptUrl: 'https://cat.example.com/index.js',
+      siteBasePaths: ['/spider/one/3', '/spider/two/3'],
+    },
+    headers: {
+      authorization: 'Bearer secret-token',
+    },
+    method: 'POST',
+    path: '/catvod/search-batch',
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(calls, [
+    {
+      keyword: 'Sintel',
+      scriptUrl: 'https://cat.example.com/index.js',
+      siteBasePaths: ['/spider/one/3', '/spider/two/3'],
+    },
+  ]);
+  assert.deepEqual(response.json(), {
+    failures: [
+      {
+        message: 'timeout',
+        siteBasePath: '/spider/two/3',
+        sourceName: '二号源',
+      },
+    ],
+    results: [
+      {
+        list: [{ vod_id: 'movie-1', vod_name: 'Sintel' }],
+        siteBasePath: '/spider/one/3',
+        sourceName: '一号源',
+      },
+    ],
+  });
+});
+
 test('server protects health check when token is configured', async () => {
   const server = createParserServer({
     runner: fixedRunner(),

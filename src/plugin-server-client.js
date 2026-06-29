@@ -25,6 +25,32 @@ async function fetchPluginServerSearch(config, keyword, fetchImpl = fetch) {
   return normalizeCatVodSearchResult(payload);
 }
 
+async function fetchPluginServerSearchBatch(
+  config,
+  { keyword = '', siteBasePaths = [] } = {},
+  fetchImpl = fetch
+) {
+  const payload = await postPluginServer(config, '/catvod/search-batch', {
+    keyword,
+    scriptUrl: config?.scriptUrl,
+    siteBasePaths,
+  }, fetchImpl);
+  const results = (Array.isArray(payload?.results) ? payload.results : []).flatMap(
+    (entry) =>
+      normalizeCatVodSearchResult(entry).map((result) => ({
+        ...result,
+        sourceApi: result.sourceApi || entry?.siteBasePath || '',
+        sourceId: result.sourceId || entry?.siteBasePath || '',
+        sourceName: result.sourceName || entry?.sourceName || entry?.siteBasePath || '',
+      }))
+  );
+
+  return {
+    failures: Array.isArray(payload?.failures) ? payload.failures : [],
+    results,
+  };
+}
+
 async function fetchPluginServerSources(config, fetchImpl = fetch) {
   const payload = await postPluginServer(config, '/catvod/sources', {
     scriptUrl: config?.scriptUrl,
@@ -159,7 +185,7 @@ function assertPluginServerToken(config) {
   const token = typeof config?.token === 'string' ? config.token.trim() : '';
 
   if (config?.tokenRequired && !token) {
-    throw new Error('远端解析器 Token 未填写，请先在设置里填写 Token');
+    throw new Error('解析器 Token 未填写，请先在设置里填写 Token');
   }
 }
 
@@ -194,6 +220,7 @@ module.exports = {
   fetchPluginServerHome,
   fetchPluginServerPlay,
   fetchPluginServerSearch,
+  fetchPluginServerSearchBatch,
   fetchPluginServerSources,
   buildPluginServerHeaders,
   buildPluginServerUrl,

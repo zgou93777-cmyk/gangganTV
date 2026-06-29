@@ -1,11 +1,44 @@
-# Ganggan Remote Parser
+# Ganggan Local Parser
 
 This service runs the CatVod/TVBox parser outside Expo Go. The iPhone app only
-stores the parser URL, Token, and user-entered source URL locally.
+stores the parser URL, optional Token, and user-entered source URL locally.
+
+## Local Parser First
+
+Run the parser on your computer first. This keeps parsing and playback on the
+same local network, which is more reliable for third-party CatVod sources than
+parsing on a cloud server.
+
+```bash
+cd server
+npm install
+PORT=3000 npm start
+```
+
+If you want a Token locally, start it with `PLUGIN_SERVER_TOKEN`; otherwise
+leave the Token blank in the app.
+
+Health check without a Token:
+
+```bash
+curl http://127.0.0.1:3000/health
+```
+
+In the app Settings page:
+
+- 本地解析器: your computer LAN address, for example `http://192.168.1.20:3000`
+- Token（可选）: leave blank unless the parser was started with `PLUGIN_SERVER_TOKEN`
+- 点播源接口: a user-provided CatVod source, for example
+  `http://wexfnw:wexfnw@cat.999888987.xyz/index.js.md5`
+
+Tap "保存解析器", then "检测解析器".
 
 ## Remote PM2 Deployment
 
-Current remote parser:
+Cloud deployment is now a fallback/testing option. Some third-party sources may
+be slow or fail to play when parsed from a cloud IP, even if local parsing works.
+
+Previous remote parser:
 
 ```text
 http://47.97.25.185:3000
@@ -75,18 +108,6 @@ Expected response includes:
 `tvboxRoutes: true` means the HTTP routes exist. `tvboxRuntime: false` means
 Android Spider/JAR sources are not connected yet, so those sources may import
 but cannot reliably search or play.
-
-## App 设置
-
-In the app Settings page:
-
-- 远端解析器: `http://47.97.25.185:3000` or your new server URL
-- 解析服务 Token: the same `PLUGIN_SERVER_TOKEN`
-- 点播源接口: a user-provided CatVod source, for example
-  `http://wexfnw:wexfnw@cat.999888987.xyz/index.js.md5`
-
-Tap "保存解析服务", then "检测解析服务". Search and playback requests require
-the Token; leaving it blank should fail before making parser requests.
 
 ## Security Notes
 

@@ -195,6 +195,17 @@ async function callBundleHost(context, method, payload) {
     };
   }
 
+  if (method === 'searchBatch') {
+    return {
+      called: true,
+      value: await searchBundleSites({
+        injectJson: (request) => app.inject(request),
+        payload,
+        sites,
+      }),
+    };
+  }
+
   if (method === 'home') {
     const site = selectBundleSite(sites, payload?.siteBasePath);
     const siteBasePath = normalizeSiteBasePath(site.api || '');
@@ -308,6 +319,17 @@ async function callBundleServerHost(context, method, payload) {
     };
   }
 
+  if (method === 'searchBatch') {
+    return {
+      called: true,
+      value: await searchBundleSites({
+        injectJson: (request) => server.injectJson(request),
+        payload,
+        sites,
+      }),
+    };
+  }
+
   if (method === 'home') {
     const site = selectBundleSite(sites, payload?.siteBasePath);
     const siteBasePath = normalizeSiteBasePath(site.api || '');
@@ -386,6 +408,58 @@ function selectBundleSite(sites, siteBasePath) {
       (candidate) => normalizeSiteBasePath(candidate.api || '') === selectedSiteBasePath
     ) || sites[0]
   );
+}
+
+async function searchBundleSites({ injectJson, payload, sites }) {
+  const selectedPaths = Array.isArray(payload?.siteBasePaths)
+    ? payload.siteBasePaths.map(normalizeSiteBasePath).filter(Boolean)
+    : [];
+  const searchSites = selectedPaths.length
+    ? selectedPaths
+        .map((siteBasePath) => selectBundleSite(sites, siteBasePath))
+        .filter(Boolean)
+        .filter(
+          (site, index, items) =>
+            items.findIndex(
+              (item) => normalizeSiteBasePath(item.api || '') === normalizeSiteBasePath(site.api || '')
+            ) === index
+        )
+    : sites;
+  const failures = [];
+  const results = [];
+
+  for (const site of searchSites) {
+    const siteBasePath = normalizeSiteBasePath(site.api || '');
+    const request = routeRequest('search', {
+      ...payload,
+      siteBasePath,
+    });
+
+    try {
+      const value = await injectJson({
+        ...request,
+        path: `${siteBasePath}${request.path}`,
+      });
+      const wrapped = wrapBundleResult('search', value, siteBasePath, site);
+
+      results.push({
+        ...wrapped,
+        siteBasePath,
+        sourceName: site?.name || site?.key || siteBasePath,
+      });
+    } catch (error) {
+      failures.push({
+        message: error?.message || '搜索失败',
+        siteBasePath,
+        sourceName: site?.name || site?.key || siteBasePath,
+      });
+    }
+  }
+
+  return {
+    failures,
+    results,
+  };
 }
 
 function normalizeSiteBasePath(value) {

@@ -38,7 +38,7 @@ test('restored plugin sources can be expanded after parser health checks', () =>
   assert.equal(appSource.includes('setCatVodSource({'), true);
   assert.equal(appSource.includes('capabilities.catvodSources === true'), true);
   assert.equal(appSource.includes('capabilities.catvodHome === true'), true);
-  assert.equal(appSource.includes('远端解析器版本偏旧'), true);
+  assert.equal(appSource.includes('本地解析器版本偏旧'), true);
 });
 
 test('app startup warms up restored CatVod plugin sources automatically', () => {
@@ -48,9 +48,9 @@ test('app startup warms up restored CatVod plugin sources automatically', () => 
   assert.equal(appSource.includes('启动时未自动加载源'), false);
 });
 
-test('discover loading state explains the selected remote source is loading', () => {
+test('discover loading state explains the selected local parser source is loading', () => {
   assert.equal(appSource.includes('正在读取当前源首页'), false);
-  assert.equal(appSource.includes('正在读取远端解析器首页'), true);
+  assert.equal(appSource.includes('正在读取本地解析器首页'), true);
   assert.equal(appSource.includes('切换分类或筛选时会重新请求真实来源'), true);
 });
 

@@ -90,7 +90,7 @@ async function scanConfigSourceCandidate(candidate, { fetchImpl, now }) {
       kind: 'plugin',
       ok: true,
       status: 'plugin-source',
-      message: '这是 CatVod/魔力云播插件源，可导入后通过远端解析器搜索。',
+      message: '这是 CatVod/魔力云播插件源，可导入后通过本地解析器搜索。',
       searchableCount: 1,
       pluginCount: 1,
       pluginDiagnostic: diagnosePluginSource(candidate.url),

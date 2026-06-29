@@ -81,6 +81,7 @@ const {
   fetchPluginServerHome,
   fetchPluginServerPlay,
   fetchPluginServerSearch,
+  fetchPluginServerSearchBatch,
   fetchPluginServerSources,
 } = require('./src/plugin-server-client');
 const {
@@ -128,7 +129,7 @@ const {
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const RECOMMENDED_CATVOD_SOURCE_URL =
   'http://wexfnw:wexfnw@cat.999888987.xyz/index.js.md5';
-const REMOTE_PARSER_HINT_URL = 'http://47.97.25.185:3000';
+const LOCAL_PARSER_HINT_URL = 'http://192.168.1.20:3000';
 const TOP_SAFE_PADDING = Platform.select({
   ios: 54,
   android: (NativeStatusBar.currentHeight || 0) + 18,
@@ -624,8 +625,8 @@ export default function App() {
         await expandPluginServerSources(pluginSource, cleanUrl, []);
         setMessage(
           pluginServerUrl.trim()
-            ? '已导入 CatVod 插件源，将使用远端解析器搜索'
-            : '已导入 CatVod 插件源，请先填写远端解析器地址和 Token'
+            ? '已导入 CatVod 插件源，将使用本地解析器搜索'
+            : '已导入 CatVod 插件源，请先填写本地解析器地址'
         );
         return;
       }
@@ -984,15 +985,15 @@ export default function App() {
     setSelectedSearchSourceIds([serverSite.id]);
     setActiveTab('discover');
     saveJson(STORAGE_KEYS.sites, nextSites).catch(() =>
-      setMessage('远端解析器站点保存失败')
+      setMessage('本地解析器站点保存失败')
     );
     AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, serverSite.id).catch(() =>
       setMessage('默认站点保存失败')
     );
     setMessage(
       pluginServerUrl
-        ? '已准备使用远端解析器'
-        : '该插件需要远端解析器，请先填写解析服务地址和 Token'
+        ? '已准备使用本地解析器'
+        : '该插件需要本地解析器，请先填写解析服务地址'
     );
   }
 
@@ -1006,7 +1007,7 @@ export default function App() {
       const childSources = await fetchPluginServerSources({
         baseUrl: pluginServerUrl.trim(),
         token: pluginServerToken.trim(),
-        tokenRequired: true,
+        tokenRequired: Boolean(pluginServerToken.trim()),
         scriptUrl,
       });
       const serverSites = childSources.length
@@ -1029,7 +1030,7 @@ export default function App() {
       setSelectedSearchSourceIds([firstSite.id]);
       setActiveTab('discover');
       saveJson(STORAGE_KEYS.sites, nextSites).catch(() =>
-        setMessage('远端解析器站点保存失败')
+        setMessage('本地解析器站点保存失败')
       );
       AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, firstSite.id).catch(() =>
         setMessage('默认站点保存失败')
@@ -1055,17 +1056,12 @@ export default function App() {
       setPluginServerUrl('');
       setPluginServerToken(cleanToken);
       setPluginServerHealth(null);
-      setMessage('已清空远端解析器地址');
+      setMessage('已清空本地解析器地址');
       return;
     }
 
     if (!isValidHttpUrl(cleanUrl)) {
-      setMessage('远端解析器地址需要以 http:// 或 https:// 开头');
-      return;
-    }
-
-    if (!cleanToken) {
-      setMessage('请填写远端解析器 Token，保存后才能搜索和播放');
+      setMessage('本地解析器地址需要以 http:// 或 https:// 开头');
       return;
     }
 
@@ -1078,30 +1074,25 @@ export default function App() {
     setPluginServerUrl(cleanUrl);
     setPluginServerToken(cleanToken);
     setPluginServerHealth(null);
-    setMessage('已保存远端解析器地址和 Token');
+    setMessage(cleanToken ? '已保存本地解析器地址和 Token' : '已保存本地解析器地址');
   }
 
   async function checkPluginServer() {
     if (!pluginServerUrl.trim()) {
-      setMessage('请先填写远端解析器地址');
-      return;
-    }
-
-    if (!pluginServerToken.trim()) {
-      setMessage('请先填写远端解析器 Token');
+      setMessage('请先填写本地解析器地址');
       return;
     }
 
     setCheckingPluginServer(true);
     setPluginServerHealth(null);
     setActiveType('config');
-    setMessage('正在检测远端解析器');
+    setMessage('正在检测本地解析器');
 
     try {
       const health = await fetchPluginServerHealth({
         baseUrl: pluginServerUrl.trim(),
         token: pluginServerToken.trim(),
-        tokenRequired: true,
+        tokenRequired: Boolean(pluginServerToken.trim()),
       });
       const ok = Boolean(health?.ok);
       const capabilities = health?.capabilities || {};
@@ -1118,11 +1109,11 @@ export default function App() {
         capabilities,
         ok,
         message: ok
-          ? `远端解析器正常：${capabilityText}`
+          ? `本地解析器正常：${capabilityText}`
           : '服务返回异常状态',
       });
       if (ok && !hasPluginHomeRoutes) {
-        setMessage('远端解析器版本偏旧：请重启/更新 3000 解析器后再刷新首页');
+        setMessage('本地解析器版本偏旧：请重启/更新 3000 解析器后再刷新首页');
         return;
       }
       if (ok && catVodSource?.url) {
@@ -1131,9 +1122,9 @@ export default function App() {
         return;
       }
 
-      setMessage(ok ? '远端解析器连接正常' : '远端解析器返回异常状态');
+      setMessage(ok ? '本地解析器连接正常' : '本地解析器返回异常状态');
     } catch (healthError) {
-      const errorMessage = healthError?.message || '远端解析器检测失败';
+      const errorMessage = healthError?.message || '本地解析器检测失败';
       setPluginServerHealth({
         ok: false,
         message: errorMessage,
@@ -1162,7 +1153,7 @@ export default function App() {
     }
 
     const cleanUrl = restoredUrl.trim();
-    const cleanToken = restoredToken.trim();
+    const cleanToken = String(restoredToken || '').trim();
     const scriptUrl = restoredPluginSite?.scriptUrl || restoredPluginSource.url;
 
     setCheckingPluginServer(true);
@@ -1173,7 +1164,7 @@ export default function App() {
       const health = await fetchPluginServerHealth({
         baseUrl: cleanUrl,
         token: cleanToken,
-        tokenRequired: true,
+        tokenRequired: Boolean(cleanToken),
       });
       const capabilities = health?.capabilities || {};
       const hasPluginHomeRoutes =
@@ -1182,16 +1173,16 @@ export default function App() {
       setPluginServerHealth({
         capabilities,
         ok: Boolean(health?.ok),
-        message: health?.ok ? '远端解析器已连接，正在加载首页内容' : '远端解析器返回异常状态',
+        message: health?.ok ? '本地解析器已连接，正在加载首页内容' : '本地解析器返回异常状态',
       });
 
       if (!health?.ok) {
-        setMessage('远端解析器返回异常状态，请到设置页检测');
+        setMessage('本地解析器返回异常状态，请到设置页检测');
         return;
       }
 
       if (!hasPluginHomeRoutes) {
-        setMessage('远端解析器版本偏旧：请重启/更新 3000 解析器后再刷新首页');
+        setMessage('本地解析器版本偏旧：请重启/更新 3000 解析器后再刷新首页');
         return;
       }
 
@@ -1207,9 +1198,9 @@ export default function App() {
     } catch (warmUpError) {
       setPluginServerHealth({
         ok: false,
-        message: warmUpError?.message || '远端解析器自动加载失败',
+        message: warmUpError?.message || '本地解析器自动加载失败',
       });
-      setMessage(warmUpError?.message || '远端解析器自动加载失败');
+      setMessage(warmUpError?.message || '本地解析器自动加载失败');
     } finally {
       setCheckingPluginServer(false);
       setLoadingDiscoverFeed(false);
@@ -1310,7 +1301,9 @@ export default function App() {
         },
         selectedSourceIds: selectedSearchSourceIds,
         sites,
+        getSearchBatchKey: getPluginServerSearchBatchKey,
         searchSite,
+        searchSiteBatch,
       });
 
       if (searchedTargets.length) {
@@ -1513,6 +1506,40 @@ export default function App() {
     return fetchTvBoxSearch(site, keyword);
   }
 
+  async function searchSiteBatch(batchSites, keyword) {
+    const firstSite = batchSites[0];
+
+    if (!firstSite || !isPluginServerSite(firstSite)) {
+      return {
+        failures: [],
+        results: [],
+      };
+    }
+
+    return fetchPluginServerSearchBatch(
+      buildPluginServerConfig(firstSite),
+      {
+        keyword,
+        siteBasePaths: batchSites.map((site) => site.siteBasePath).filter(Boolean),
+      }
+    );
+  }
+
+  function getPluginServerSearchBatchKey(site) {
+    if (!isPluginServerSite(site) || !site?.siteBasePath) {
+      return '';
+    }
+
+    const scriptUrl = firstValidHttpUrl([site.scriptUrl, site.sourceId, site.api]);
+    const parserUrl = pluginServerUrl.trim();
+
+    if (!scriptUrl || !parserUrl) {
+      return '';
+    }
+
+    return `${parserUrl}|${scriptUrl}`;
+  }
+
   async function loadSourceDiscoverFeed() {
     if (!selectedSite || isTvBoxSpiderSite(selectedSite)) {
       setSourceDiscoverResults([]);
@@ -1555,14 +1582,10 @@ export default function App() {
       throw new Error('请先在设置里填写解析服务地址');
     }
 
-    if (!pluginServerToken.trim()) {
-      throw new Error('请先在设置里填写远端解析器 Token');
-    }
-
     return {
       baseUrl: pluginServerUrl.trim(),
       token: pluginServerToken.trim(),
-      tokenRequired: true,
+      tokenRequired: Boolean(pluginServerToken.trim()),
       configUrl: site?.sourceId || site?.configUrl,
       siteKey: site?.siteKey || site?.id,
     };
@@ -1570,17 +1593,13 @@ export default function App() {
 
   function buildPluginServerConfig(site) {
     if (!pluginServerUrl.trim()) {
-      throw new Error('请先在设置里填写远端解析器地址');
-    }
-
-    if (!pluginServerToken.trim()) {
-      throw new Error('请先在设置里填写远端解析器 Token');
+      throw new Error('请先在设置里填写本地解析器地址');
     }
 
     return {
       baseUrl: pluginServerUrl.trim(),
       token: pluginServerToken.trim(),
-      tokenRequired: true,
+      tokenRequired: Boolean(pluginServerToken.trim()),
       siteBasePath: site?.siteBasePath || '',
       scriptUrl: firstValidHttpUrl([site?.scriptUrl, site?.sourceId, site?.api]),
     };
@@ -2096,7 +2115,7 @@ export default function App() {
         {loadingDiscoverFeed ? (
           <View style={styles.loadingStatePanel}>
             <ActivityIndicator color="#2f80ed" />
-            <Text style={styles.loadingStateTitle}>正在读取远端解析器首页</Text>
+            <Text style={styles.loadingStateTitle}>正在读取本地解析器首页</Text>
             <Text style={styles.loadingStateText}>
               切换分类或筛选时会重新请求真实来源，已加载的海报会自动替换。
             </Text>
@@ -2341,19 +2360,19 @@ export default function App() {
         </View>
 
         <View style={styles.settingsSectionLabelWrap}>
-          <Text style={styles.settingsSectionLabel}>远端解析器</Text>
+          <Text style={styles.settingsSectionLabel}>本地解析器</Text>
         </View>
         <View style={styles.settingsGroup}>
           <View style={styles.panelHeader}>
-            <Text style={styles.sectionTitle}>远端解析器</Text>
-            <Text style={styles.sectionHint}>用于解析 CatVod 插件源，填地址和 Token 后即可搜索播放</Text>
+            <Text style={styles.sectionTitle}>本地解析器</Text>
+            <Text style={styles.sectionHint}>电脑上启动解析器后，手机填同一局域网地址即可搜索播放；Token 没有设置就留空</Text>
           </View>
           <TextInput
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
             onChangeText={setPluginServerUrl}
-            placeholder={`解析服务地址，例如 ${REMOTE_PARSER_HINT_URL}`}
+            placeholder={`本机解析器地址，例如 ${LOCAL_PARSER_HINT_URL}`}
             placeholderTextColor="#8d96a0"
             style={styles.input}
             value={pluginServerUrl}
@@ -2362,7 +2381,7 @@ export default function App() {
             autoCapitalize="none"
             autoCorrect={false}
             onChangeText={setPluginServerToken}
-            placeholder="解析服务 Token"
+            placeholder="Token（可选）"
             placeholderTextColor="#8d96a0"
             secureTextEntry
             style={styles.input}
@@ -2370,35 +2389,35 @@ export default function App() {
           />
           <CompactButton
             onPress={() => {
-              setPluginServerUrl(REMOTE_PARSER_HINT_URL);
+              setPluginServerUrl(LOCAL_PARSER_HINT_URL);
               setPluginServerHealth(null);
               AsyncStorage.setItem(
                 STORAGE_KEYS.pluginServerUrl,
-                REMOTE_PARSER_HINT_URL
-              ).catch(() => setMessage('远端解析器地址保存失败'));
-              setMessage(`已填入远端解析器地址：${REMOTE_PARSER_HINT_URL}，请继续填写 Token`);
+                LOCAL_PARSER_HINT_URL
+              ).catch(() => setMessage('本地解析器地址保存失败'));
+              setMessage(`已填入本机解析器地址：${LOCAL_PARSER_HINT_URL}`);
             }}
             variant="plain"
           >
-            使用推荐解析服务
+            使用本机解析器地址
           </CompactButton>
           <CompactButton
             onPress={() =>
-              savePluginServerUrl().catch(() => setMessage('远端解析器保存失败'))
+              savePluginServerUrl().catch(() => setMessage('本地解析器保存失败'))
             }
             variant="secondary"
           >
-            保存解析服务
+            保存解析器
           </CompactButton>
           <View style={styles.buttonRow}>
             <CompactButton
               disabled={checkingPluginServer}
               onPress={() =>
-                checkPluginServer().catch(() => setMessage('远端解析器检测失败'))
+                checkPluginServer().catch(() => setMessage('本地解析器检测失败'))
               }
               variant="plain"
             >
-              {checkingPluginServer ? '检测中' : '检测解析服务'}
+              {checkingPluginServer ? '检测中' : '检测解析器'}
             </CompactButton>
           </View>
           {pluginServerHealth ? (
@@ -2696,9 +2715,9 @@ export default function App() {
         />
         <View style={styles.sourceFilterSheet}>
           <View style={styles.overlayHandle} />
-          <Text style={styles.searchOverlayTitle}>选择配置源</Text>
+          <Text style={styles.searchOverlayTitle}>选择搜索来源</Text>
           <Text style={styles.sectionHint}>
-            默认只搜索当前来源；勾选更多来源后会一起搜索，速度会变慢。
+            默认只搜索当前来源；多选后会一起搜索。本地解析器会尽量合并同一插件下的多个来源。
           </Text>
           <ScrollView
             contentContainerStyle={styles.sourceFilterList}
@@ -2755,12 +2774,18 @@ export default function App() {
               <Text style={styles.emptyText}>还没有导入配置源</Text>
             )}
           </ScrollView>
-          <CompactButton
-            onPress={() => setSourceFilterOpen(false)}
-            variant="accent"
-          >
-            完成
-          </CompactButton>
+          <View style={styles.sourceFilterFooter}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setSourceFilterOpen(false)}
+              style={({ pressed }) => [
+                styles.sourceFilterDoneButton,
+                pressed && styles.buttonPressed,
+              ]}
+            >
+              <Text style={styles.sourceFilterDoneText}>完成</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     );
@@ -5256,6 +5281,25 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: '800',
+    letterSpacing: 0,
+  },
+  sourceFilterFooter: {
+    paddingTop: 4,
+  },
+  sourceFilterDoneButton: {
+    ...GLASS_BUTTON_STYLE,
+    alignItems: 'center',
+    backgroundColor: 'rgba(47, 125, 246, 0.18)',
+    borderColor: 'rgba(47, 125, 246, 0.52)',
+    borderRadius: 16,
+    height: 48,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  sourceFilterDoneText: {
+    color: COLORS.blue,
+    fontSize: 15,
+    fontWeight: '900',
     letterSpacing: 0,
   },
   detailPageContent: {

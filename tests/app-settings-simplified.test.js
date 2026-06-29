@@ -21,18 +21,27 @@ test('settings screen is a single-source user configuration page', () => {
   [
     '当前点播源',
     '源地址',
-    '远端解析器',
-    '解析服务地址',
-    '解析服务 Token',
+    '本地解析器',
+    '本机解析器地址',
+    'Token（可选）',
+    '使用本机解析器地址',
+    '保存解析器',
+    '检测解析器',
     '连接状态',
     '隐私说明',
   ].forEach((copy) => {
     assert.equal(settingsSource.includes(copy), true, `settings should include ${copy}`);
   });
 
-  assert.equal(settingsSource.includes('本地解析器'), false);
-  assert.equal(settingsSource.includes('使用本机解析器地址'), false);
-  assert.equal(settingsSource.includes('本机解析器地址'), false);
+  assert.equal(settingsSource.includes('远端解析器'), false);
+  assert.equal(settingsSource.includes('使用推荐解析服务'), false);
+});
+
+test('local parser setup does not require a token before saving or checking', () => {
+  assert.equal(appSource.includes("setMessage('请填写远端解析器 Token"), false);
+  assert.equal(appSource.includes("setMessage('请先填写远端解析器 Token"), false);
+  assert.equal(appSource.includes('tokenRequired: true'), false);
+  assert.equal(appSource.includes('Token（可选）'), true);
 });
 
 test('settings screen hides developer batch diagnostics and plugin verification', () => {

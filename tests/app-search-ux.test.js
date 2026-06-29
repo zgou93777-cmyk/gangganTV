@@ -50,3 +50,22 @@ test('search defaults to the current source instead of scanning every expanded s
   assert.equal(appSource.includes('至少保留一个搜索来源'), true);
   assert.equal(appSource.includes('默认搜索全部可用来源'), false);
 });
+
+test('source filter is a search source picker with a compact footer action', () => {
+  const start = appSource.indexOf('function renderSourceFilterSheet()');
+  const end = appSource.indexOf('function renderPosterDetailPage()', start);
+  const source = appSource.slice(start, end);
+
+  assert.equal(source.includes('选择搜索来源'), true);
+  assert.equal(source.includes('选择配置源'), false);
+  assert.equal(source.includes('sourceFilterFooter'), true);
+  assert.equal(source.includes('sourceFilterDoneButton'), true);
+  assert.equal(source.includes('多选后会一起搜索'), true);
+});
+
+test('app wires CatVod batch search without removing multi-source selection', () => {
+  assert.equal(appSource.includes('fetchPluginServerSearchBatch'), true);
+  assert.equal(appSource.includes('searchSiteBatch,'), true);
+  assert.equal(appSource.includes('getPluginServerSearchBatchKey'), true);
+  assert.equal(appSource.includes('siteBasePaths: batchSites.map'), true);
+});

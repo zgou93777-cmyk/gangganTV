@@ -193,3 +193,92 @@ test('searchAcrossSites reports each source as soon as it finishes', async () =>
     ['fast-1', 'slow-1']
   );
 });
+
+test('searchAcrossSites batches sources with the same batch key while keeping per-source progress', async () => {
+  const batchCalls = [];
+  const singleCalls = [];
+  const progressEvents = [];
+
+  const result = await searchAcrossSites({
+    getSearchBatchKey: (site) => site.batchKey || '',
+    keyword: '剑来',
+    onProgress: (event) => progressEvents.push(event),
+    searchSite: async (site) => {
+      singleCalls.push(site.id);
+      return [{ id: `${site.id}-result`, name: site.name }];
+    },
+    searchSiteBatch: async (batchSites, keyword) => {
+      batchCalls.push({
+        keyword,
+        siteIds: batchSites.map((site) => site.id),
+      });
+
+      return {
+        failures: [
+          {
+            sourceId: 'cat-two',
+            sourceName: '二号源',
+            message: '内部插件解析错误',
+          },
+        ],
+        results: [
+          {
+            id: 'cat-one-result',
+            name: '剑来',
+            sourceId: 'cat-one',
+            sourceName: '一号源',
+          },
+        ],
+      };
+    },
+    sites: [
+      { batchKey: 'cat-script', id: 'cat-one', name: '一号源', searchable: true },
+      { batchKey: 'cat-script', id: 'cat-two', name: '二号源', searchable: true },
+      { id: 'normal', name: '普通源', searchable: true },
+    ],
+  });
+
+  assert.deepEqual(batchCalls, [
+    {
+      keyword: '剑来',
+      siteIds: ['cat-one', 'cat-two'],
+    },
+  ]);
+  assert.deepEqual(singleCalls, ['normal']);
+  assert.deepEqual(
+    result.results.map((item) => ({
+      id: item.id,
+      sourceId: item.sourceId,
+      sourceName: item.sourceName,
+    })).sort((left, right) => left.id.localeCompare(right.id)),
+    [
+      { id: 'cat-one-result', sourceId: 'cat-one', sourceName: '一号源' },
+      { id: 'normal-result', sourceId: 'normal', sourceName: '普通源' },
+    ]
+  );
+  assert.deepEqual(result.failures, [
+    {
+      sourceId: 'cat-two',
+      sourceName: '二号源',
+      message: '内部插件解析错误',
+    },
+  ]);
+  assert.equal(progressEvents.length, 3);
+  assert.deepEqual(
+    progressEvents.map((event) => event.completedCount),
+    [1, 2, 3]
+  );
+  assert.deepEqual(
+    progressEvents
+      .map((event) => ({
+        sourceId: event.failure?.sourceId || event.results?.[0]?.sourceId || event.site.id,
+        type: event.type,
+      }))
+      .sort((left, right) => left.sourceId.localeCompare(right.sourceId)),
+    [
+      { sourceId: 'cat-one', type: 'results' },
+      { sourceId: 'cat-two', type: 'failure' },
+      { sourceId: 'normal', type: 'results' },
+    ]
+  );
+});

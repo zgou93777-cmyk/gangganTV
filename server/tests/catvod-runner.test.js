@@ -808,6 +808,82 @@ test('CatVodRunner exposes bundle video sources and searches one selected source
   assert.equal(search.list[0].vod_name, '痴迷 B');
 });
 
+test('CatVodRunner batch searches selected bundle sources in one worker', async () => {
+  const runner = new CatVodRunner({
+    fetchText: async () => `
+      module.exports = {
+        async start() {
+          const server = catServerFactory(async (request, response) => {
+            const chunks = [];
+            request.on('data', (chunk) => chunks.push(chunk));
+            request.on('end', () => {
+              const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {};
+              response.setHeader('content-type', 'application/json');
+              if (request.url === '/config') {
+                response.end(JSON.stringify({
+                  video: {
+                    sites: [
+                      { key: 'nodejs_one', name: '一号源', api: '/spider/one/3' },
+                      { key: 'nodejs_two', name: '二号源', api: '/spider/two/3' }
+                    ]
+                  }
+                }));
+                return;
+              }
+              if (request.url === '/spider/one/3/search') {
+                response.end(JSON.stringify({
+                  list: [{ vod_id: 'one-' + body.wd, vod_name: body.wd + ' A' }]
+                }));
+                return;
+              }
+              if (request.url === '/spider/two/3/search') {
+                response.end(JSON.stringify({
+                  list: [{ vod_id: 'two-' + body.wd, vod_name: body.wd + ' B' }]
+                }));
+                return;
+              }
+              response.statusCode = 404;
+              response.end(JSON.stringify({ error: 'not found' }));
+            });
+          });
+          server.listen({ port: 9988 }, () => {});
+        }
+      };
+    `,
+    timeoutMs: 3000,
+  });
+
+  const search = await runner.searchBatch({
+    keyword: '痴迷',
+    scriptUrl: 'https://cat.example.com/index.js',
+    siteBasePaths: ['/spider/one/3', '/spider/two/3'],
+  });
+
+  assert.equal(search.failures.length, 0);
+  assert.deepEqual(
+    search.results.map((entry) => ({
+      count: entry.list.length,
+      siteBasePath: entry.siteBasePath,
+      sourceName: entry.sourceName,
+      title: entry.list[0].vod_name,
+    })),
+    [
+      {
+        count: 1,
+        siteBasePath: '/spider/one/3',
+        sourceName: '一号源',
+        title: '痴迷 A',
+      },
+      {
+        count: 1,
+        siteBasePath: '/spider/two/3',
+        sourceName: '二号源',
+        title: '痴迷 B',
+      },
+    ]
+  );
+});
+
 test('CatVodRunner loads bundle home lists from the selected source', async () => {
   const runner = new CatVodRunner({
     fetchText: async () => `
