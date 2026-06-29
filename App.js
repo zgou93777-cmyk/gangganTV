@@ -1676,7 +1676,7 @@ export default function App() {
               {card.poster ? (
                 <Image
                   resizeMode="cover"
-                  source={{ uri: card.poster }}
+                  source={buildImageSource(card.poster, card.raw?.posterHeaders)}
                   style={styles.posterImage}
                 />
               ) : (
@@ -1902,20 +1902,11 @@ export default function App() {
             accessibilityRole="button"
             key={poster.id}
             onPress={() => {
-              setSelectedResult({
-                id: poster.id,
-                name: poster.title,
-                poster: poster.poster,
-                remarks: poster.subtitle,
-                sourceName: selectedSite?.name || '豆瓣热播',
-                year: '2026',
-                type: poster.subtitle,
-                duration: poster.rating ? `评分 ${poster.rating}` : '',
-                description:
-                  '热门内容流仅用于首页展示。搜索结果进入详情后会读取对应来源的播放线路和剧集。',
-              });
-              setSelectedDetail(null);
-              setActivePage('detail');
+              setSearchKeyword(poster.title);
+              setActivePage('searchResults');
+              searchWithKeyword(poster.title).catch(() =>
+                setMessage('首页内容搜索失败')
+              );
             }}
             style={({ pressed }) => [
               styles.discoverPosterCard,
@@ -1925,7 +1916,7 @@ export default function App() {
             <View style={styles.discoverPosterFrame}>
               <Image
                 resizeMode="cover"
-                source={{ uri: poster.poster }}
+                source={buildImageSource(poster.poster, poster.posterHeaders)}
                 style={styles.posterImage}
               />
               {poster.rating ? (
@@ -3776,6 +3767,19 @@ function upsertById(items, nextItem) {
 
 function firstUsableSiteId(items) {
   return items.find((site) => site.searchable && !site.unsupportedReason)?.id || '';
+}
+
+function buildImageSource(uri, headers = {}) {
+  const cleanUri = String(uri || '').trim();
+  const cleanHeaders =
+    headers && typeof headers === 'object' && !Array.isArray(headers) ? headers : {};
+
+  return Object.keys(cleanHeaders).length
+    ? {
+        headers: cleanHeaders,
+        uri: cleanUri,
+      }
+    : { uri: cleanUri };
 }
 
 function buildSearchMessage({ failureCount = 0, resultCount = 0, targetCount = 0 } = {}) {

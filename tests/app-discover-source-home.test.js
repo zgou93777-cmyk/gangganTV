@@ -30,6 +30,16 @@ test('restored plugin sources can be expanded after parser health checks', () =>
   assert.equal(appSource.includes('本地解析器版本偏旧'), true);
 });
 
+test('discover poster cards search by title instead of opening placeholder details', () => {
+  const start = appSource.indexOf('function renderDiscoverPosterGrid()');
+  const end = appSource.indexOf('function renderDirectPanel()', start);
+  const gridSource = appSource.slice(start, end);
+
+  assert.equal(gridSource.includes('searchWithKeyword(poster.title)'), true);
+  assert.equal(gridSource.includes("setActivePage('searchResults')"), true);
+  assert.equal(gridSource.includes("setActivePage('detail')"), false);
+});
+
 test('main shell uses compact top padding instead of the full safe area spacer', () => {
   const stylesStart = appSource.indexOf('scrollContent: {');
   const stylesEnd = appSource.indexOf('header: {', stylesStart);

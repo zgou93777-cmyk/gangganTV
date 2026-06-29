@@ -77,6 +77,9 @@ test('builds source discover posters from imported source results', () => {
         id: 'movie-1',
         name: 'Source Movie',
         poster: 'https://img.example.com/1.jpg',
+        posterHeaders: {
+          Referer: 'https://movie.douban.com/',
+        },
         remarks: '更新至 8 集',
       },
     ],
@@ -90,10 +93,16 @@ test('builds source discover posters from imported source results', () => {
       subtitle: '瓜子秒播 · 更新至 8 集',
       rating: '',
       poster: 'https://img.example.com/1.jpg',
+      posterHeaders: {
+        Referer: 'https://movie.douban.com/',
+      },
       raw: {
         id: 'movie-1',
         name: 'Source Movie',
         poster: 'https://img.example.com/1.jpg',
+        posterHeaders: {
+          Referer: 'https://movie.douban.com/',
+        },
         remarks: '更新至 8 集',
       },
     },

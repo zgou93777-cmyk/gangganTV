@@ -215,6 +215,7 @@ function buildSourceDiscoverPosterFeed(results = [], { sourceName = '' } = {}) {
         subtitle,
         rating: '',
         poster: readableText(result?.poster),
+        posterHeaders: result?.posterHeaders || {},
         raw: result,
       };
     })

@@ -18,9 +18,12 @@ function normalizeCatVodSearchResult(payload) {
     const sourceName = readableText(rawItem.source_name || rawItem.source_key);
     const sourceApi = readableText(rawItem.source_api);
 
+    const image = normalizeCatVodImage(result.poster);
+
     return {
       ...result,
-      poster: normalizeCatVodImageUrl(result.poster),
+      poster: image.url,
+      ...(Object.keys(image.headers).length ? { posterHeaders: image.headers } : {}),
       ...(sourceId ? { sourceId } : {}),
       ...(sourceName ? { sourceName } : {}),
       ...(sourceApi ? { sourceApi } : {}),
@@ -28,11 +31,11 @@ function normalizeCatVodSearchResult(payload) {
   });
 }
 
-function normalizeCatVodImageUrl(value) {
+function normalizeCatVodImage(value) {
   const cleanValue = readableText(value);
 
   if (!cleanValue) {
-    return '';
+    return { headers: {}, url: '' };
   }
 
   try {
@@ -40,13 +43,40 @@ function normalizeCatVodImageUrl(value) {
     const proxiedUrl = parsedUrl.searchParams.get('url');
 
     if (parsedUrl.pathname.includes('/imageProxy') && isValidHttpUrl(proxiedUrl || '')) {
-      return proxiedUrl.trim();
+      return {
+        headers: parseImageProxyHeaders(parsedUrl.searchParams.get('customHeaders')),
+        url: proxiedUrl.trim(),
+      };
     }
   } catch {
-    return cleanValue;
+    return { headers: {}, url: cleanValue };
   }
 
-  return cleanValue;
+  return { headers: {}, url: cleanValue };
+}
+
+function parseImageProxyHeaders(value) {
+  const cleanValue = readableText(value);
+
+  if (!cleanValue) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(cleanValue);
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([key, headerValue]) => [readableText(key), readableText(headerValue)])
+        .filter(([key, headerValue]) => key && headerValue)
+    );
+  } catch {
+    return {};
+  }
 }
 
 function normalizeCatVodDetailResult(payload) {

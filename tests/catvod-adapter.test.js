@@ -39,13 +39,18 @@ test('normalizes CatVod image proxy poster urls to their remote image url', () =
       {
         vod_id: 'movie-1',
         vod_name: '豆瓣电影',
-        vod_pic:
-          'http://127.0.0.1:0/imageProxy?url=https%3A%2F%2Fimg.example.com%2Fposter.jpg&cache=86400',
+        vod_pic: [
+          'http://127.0.0.1:0/imageProxy?url=https%3A%2F%2Fimg.example.com%2Fposter.jpg',
+          'customHeaders=%7B%22Referer%22%3A%22https%3A%2F%2Fmovie.douban.com%2F%22%7D',
+        ].join('&'),
       },
     ],
   });
 
   assert.equal(results[0].poster, 'https://img.example.com/poster.jpg');
+  assert.deepEqual(results[0].posterHeaders, {
+    Referer: 'https://movie.douban.com/',
+  });
 });
 
 test('normalizes CatVod detail payloads into play groups', () => {
