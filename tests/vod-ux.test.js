@@ -4,6 +4,7 @@ const test = require('node:test');
 const {
   buildDetailLoadingMessage,
   buildEpisodeLoadingMessage,
+  buildPlaybackFailureMessage,
   buildSearchLoadingMessage,
   hasMojibakeText,
 } = require('../src/vod-ux');
@@ -27,6 +28,17 @@ test('detail and episode loading messages include the current item when availabl
   assert.equal(
     buildEpisodeLoadingMessage('TC'),
     '正在解析「TC」播放地址'
+  );
+});
+
+test('buildPlaybackFailureMessage guides users to switch route or source', () => {
+  assert.equal(
+    buildPlaybackFailureMessage('解析超时'),
+    '解析超时。可以换一条播放线路，或返回搜索页换一个来源再试。'
+  );
+  assert.equal(
+    buildPlaybackFailureMessage(),
+    '播放失败。可以换一条播放线路，或返回搜索页换一个来源再试。'
   );
 });
 

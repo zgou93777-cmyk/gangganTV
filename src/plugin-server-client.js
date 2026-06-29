@@ -5,6 +5,7 @@ const {
 } = require('./catvod-adapter');
 
 async function fetchPluginServerHealth(config, fetchImpl = fetch) {
+  assertPluginServerToken(config);
   const url = buildPluginServerUrl(config?.baseUrl, '/health');
   const response = await fetchImpl(url, {
     headers: buildPluginServerHeaders(config?.token),
@@ -73,6 +74,7 @@ async function fetchPluginServerPlay(config, episode, fetchImpl = fetch) {
 }
 
 async function postPluginServer(config, path, body, fetchImpl) {
+  assertPluginServerToken(config);
   const url = buildPluginServerUrl(config?.baseUrl, path);
   const response = await fetchImpl(url, {
     body: JSON.stringify(body),
@@ -153,6 +155,14 @@ function isMissingCookieRuntimeObject(message) {
   );
 }
 
+function assertPluginServerToken(config) {
+  const token = typeof config?.token === 'string' ? config.token.trim() : '';
+
+  if (config?.tokenRequired && !token) {
+    throw new Error('远端解析器 Token 未填写，请先在设置里填写 Token');
+  }
+}
+
 function buildPluginServerUrl(baseUrl, path) {
   const cleanBaseUrl = typeof baseUrl === 'string' ? baseUrl.trim() : '';
 
@@ -185,4 +195,6 @@ module.exports = {
   fetchPluginServerPlay,
   fetchPluginServerSearch,
   fetchPluginServerSources,
+  buildPluginServerHeaders,
+  buildPluginServerUrl,
 };

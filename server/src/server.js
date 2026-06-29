@@ -21,7 +21,7 @@ function createParserServer(options = {}) {
     options.tvBoxRunner || new TvBoxRunner(options.tvBoxRunnerOptions);
   const routes = new Map();
 
-  routes.set('GET /health', async () => ({
+  routes.set('GET /health', withAuth(token, async () => ({
     capabilities: {
       catvod: true,
       catvodHome: typeof runner?.home === 'function',
@@ -36,7 +36,7 @@ function createParserServer(options = {}) {
     },
     ok: true,
     service: 'ganggan-plugin-parser',
-  }));
+  })));
   routes.set('POST /catvod/search', withAuth(token, async (request) =>
     runner.search({
       keyword: String(request.body?.keyword || request.body?.wd || '').trim(),

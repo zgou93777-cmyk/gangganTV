@@ -26,6 +26,12 @@ function buildEpisodeLoadingMessage(title) {
   return '正在解析播放地址';
 }
 
+function buildPlaybackFailureMessage(message) {
+  const cleanMessage = readableText(message) || '播放失败';
+
+  return `${cleanMessage}。可以换一条播放线路，或返回搜索页换一个来源再试。`;
+}
+
 function hasMojibakeText(value) {
   const text = readableText(value);
 
@@ -47,6 +53,7 @@ function readableText(value) {
 module.exports = {
   buildDetailLoadingMessage,
   buildEpisodeLoadingMessage,
+  buildPlaybackFailureMessage,
   buildSearchLoadingMessage,
   hasMojibakeText,
 };

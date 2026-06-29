@@ -21,12 +21,18 @@ test('settings screen is a single-source user configuration page', () => {
   [
     '当前点播源',
     '源地址',
-    '本地解析器',
+    '远端解析器',
+    '解析服务地址',
+    '解析服务 Token',
     '连接状态',
     '隐私说明',
   ].forEach((copy) => {
     assert.equal(settingsSource.includes(copy), true, `settings should include ${copy}`);
   });
+
+  assert.equal(settingsSource.includes('本地解析器'), false);
+  assert.equal(settingsSource.includes('使用本机解析器地址'), false);
+  assert.equal(settingsSource.includes('本机解析器地址'), false);
 });
 
 test('settings screen hides developer batch diagnostics and plugin verification', () => {

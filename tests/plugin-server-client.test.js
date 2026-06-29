@@ -292,6 +292,22 @@ test('plugin server errors use clear Chinese messages', async () => {
   );
 });
 
+test('plugin server client requires a token when tokenRequired is enabled', async () => {
+  await assert.rejects(
+    () =>
+      fetchPluginServerSearch(
+        {
+          baseUrl: 'https://parser.example.com',
+          scriptUrl: 'https://cat.example.com/index.js',
+          tokenRequired: true,
+        },
+        '仙逆',
+        async () => jsonResponse({ list: [] })
+      ),
+    /Token/
+  );
+});
+
 function jsonResponse(body, status = 200) {
   return {
     ok: status >= 200 && status < 300,

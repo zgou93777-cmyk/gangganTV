@@ -35,3 +35,8 @@ test('search results page renders incremental progress without hiding returned p
   assert.equal(appSource.includes('buildSearchProgressMessage'), true);
   assert.equal(appSource.includes("searchResults.length ? renderVodResultGrid(vodResultCards) : null"), true);
 });
+
+test('search loading copy explains incremental remote source progress', () => {
+  assert.equal(appSource.includes('已返回的海报会先显示，剩余来源继续搜索'), true);
+  assert.equal(appSource.includes('正在搜索真实来源'), true);
+});

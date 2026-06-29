@@ -113,6 +113,7 @@ const {
 const {
   buildDetailLoadingMessage,
   buildEpisodeLoadingMessage,
+  buildPlaybackFailureMessage,
   buildSearchLoadingMessage,
 } = require('./src/vod-ux');
 const {
@@ -127,7 +128,7 @@ const {
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const RECOMMENDED_CATVOD_SOURCE_URL =
   'http://wexfnw:wexfnw@cat.999888987.xyz/index.js.md5';
-const LOCAL_PARSER_HINT_URL = 'http://192.168.220.41:3000';
+const REMOTE_PARSER_HINT_URL = 'http://47.97.25.185:3000';
 const TOP_SAFE_PADDING = Platform.select({
   ios: 54,
   android: (NativeStatusBar.currentHeight || 0) + 18,
@@ -305,7 +306,7 @@ export default function App() {
 
   useEffect(() => {
     if (error?.message) {
-      setMessage(`播放错误：${error.message}`);
+      setMessage(buildPlaybackFailureMessage(`播放错误：${error.message}`));
       return;
     }
 
@@ -610,8 +611,8 @@ export default function App() {
         await expandPluginServerSources(pluginSource, cleanUrl, []);
         setMessage(
           pluginServerUrl.trim()
-            ? '已导入 CatVod 插件源，将使用本地解析器搜索'
-            : '已导入 CatVod 插件源，请先填写本地解析器地址'
+            ? '已导入 CatVod 插件源，将使用远端解析器搜索'
+            : '已导入 CatVod 插件源，请先填写远端解析器地址和 Token'
         );
         return;
       }
@@ -967,15 +968,15 @@ export default function App() {
     setSelectedSiteId(serverSite.id);
     setActiveTab('discover');
     saveJson(STORAGE_KEYS.sites, nextSites).catch(() =>
-      setMessage('本地解析器站点保存失败')
+      setMessage('远端解析器站点保存失败')
     );
     AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, serverSite.id).catch(() =>
       setMessage('默认站点保存失败')
     );
     setMessage(
       pluginServerUrl
-        ? '已准备使用本地解析器'
-        : '该插件需要本地解析器，请先填写本地解析器地址'
+        ? '已准备使用远端解析器'
+        : '该插件需要远端解析器，请先填写解析服务地址和 Token'
     );
   }
 
@@ -989,6 +990,7 @@ export default function App() {
       const childSources = await fetchPluginServerSources({
         baseUrl: pluginServerUrl.trim(),
         token: pluginServerToken.trim(),
+        tokenRequired: true,
         scriptUrl,
       });
       const serverSites = childSources.length
@@ -1011,7 +1013,7 @@ export default function App() {
       setSelectedSearchSourceIds(serverSites.map((site) => site.id));
       setActiveTab('discover');
       saveJson(STORAGE_KEYS.sites, nextSites).catch(() =>
-        setMessage('本地解析器站点保存失败')
+        setMessage('远端解析器站点保存失败')
       );
       AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, firstSite.id).catch(() =>
         setMessage('默认站点保存失败')
@@ -1037,12 +1039,17 @@ export default function App() {
       setPluginServerUrl('');
       setPluginServerToken(cleanToken);
       setPluginServerHealth(null);
-      setMessage('已清空本地解析器地址');
+      setMessage('已清空远端解析器地址');
       return;
     }
 
     if (!isValidHttpUrl(cleanUrl)) {
-      setMessage('本地解析器地址需要以 http:// 或 https:// 开头');
+      setMessage('远端解析器地址需要以 http:// 或 https:// 开头');
+      return;
+    }
+
+    if (!cleanToken) {
+      setMessage('请填写远端解析器 Token，保存后才能搜索和播放');
       return;
     }
 
@@ -1055,19 +1062,30 @@ export default function App() {
     setPluginServerUrl(cleanUrl);
     setPluginServerToken(cleanToken);
     setPluginServerHealth(null);
-    setMessage('已保存本地解析器地址');
+    setMessage('已保存远端解析器地址和 Token');
   }
 
   async function checkPluginServer() {
+    if (!pluginServerUrl.trim()) {
+      setMessage('请先填写远端解析器地址');
+      return;
+    }
+
+    if (!pluginServerToken.trim()) {
+      setMessage('请先填写远端解析器 Token');
+      return;
+    }
+
     setCheckingPluginServer(true);
     setPluginServerHealth(null);
     setActiveType('config');
-    setMessage('正在检测本地解析器');
+    setMessage('正在检测远端解析器');
 
     try {
       const health = await fetchPluginServerHealth({
         baseUrl: pluginServerUrl.trim(),
         token: pluginServerToken.trim(),
+        tokenRequired: true,
       });
       const ok = Boolean(health?.ok);
       const capabilities = health?.capabilities || {};
@@ -1084,11 +1102,11 @@ export default function App() {
         capabilities,
         ok,
         message: ok
-          ? `本地解析服务正常：${capabilityText}`
+          ? `远端解析器正常：${capabilityText}`
           : '服务返回异常状态',
       });
       if (ok && !hasPluginHomeRoutes) {
-        setMessage('本地解析器版本偏旧：请重启/更新 3000 解析器后再刷新首页');
+        setMessage('远端解析器版本偏旧：请重启/更新 3000 解析器后再刷新首页');
         return;
       }
       if (ok && catVodSource?.url) {
@@ -1097,9 +1115,9 @@ export default function App() {
         return;
       }
 
-      setMessage(ok ? '本地解析服务连接正常' : '本地解析服务返回异常状态');
+      setMessage(ok ? '远端解析器连接正常' : '远端解析器返回异常状态');
     } catch (healthError) {
-      const errorMessage = healthError?.message || '本地解析器检测失败';
+      const errorMessage = healthError?.message || '远端解析器检测失败';
       setPluginServerHealth({
         ok: false,
         message: errorMessage,
@@ -1360,7 +1378,7 @@ export default function App() {
         }
       );
     } catch (episodeError) {
-      setMessage(episodeError?.message || '播放地址解析失败');
+      setMessage(buildPlaybackFailureMessage(episodeError?.message || '播放地址解析失败'));
     } finally {
       setLoadingEpisodeKey('');
     }
@@ -1449,9 +1467,14 @@ export default function App() {
       throw new Error('请先在设置里填写解析服务地址');
     }
 
+    if (!pluginServerToken.trim()) {
+      throw new Error('请先在设置里填写远端解析器 Token');
+    }
+
     return {
       baseUrl: pluginServerUrl.trim(),
       token: pluginServerToken.trim(),
+      tokenRequired: true,
       configUrl: site?.sourceId || site?.configUrl,
       siteKey: site?.siteKey || site?.id,
     };
@@ -1459,12 +1482,17 @@ export default function App() {
 
   function buildPluginServerConfig(site) {
     if (!pluginServerUrl.trim()) {
-      throw new Error('请先在设置里填写本地解析器地址');
+      throw new Error('请先在设置里填写远端解析器地址');
+    }
+
+    if (!pluginServerToken.trim()) {
+      throw new Error('请先在设置里填写远端解析器 Token');
     }
 
     return {
       baseUrl: pluginServerUrl.trim(),
       token: pluginServerToken.trim(),
+      tokenRequired: true,
       siteBasePath: site?.siteBasePath || '',
       scriptUrl: firstValidHttpUrl([site?.scriptUrl, site?.sourceId, site?.api]),
     };
@@ -1978,7 +2006,13 @@ export default function App() {
         {renderDiscoverFeedRail()}
         {renderDiscoverFilters()}
         {loadingDiscoverFeed ? (
-          <Text style={styles.sectionHint}>正在读取当前源首页</Text>
+          <View style={styles.loadingStatePanel}>
+            <ActivityIndicator color="#2f80ed" />
+            <Text style={styles.loadingStateTitle}>正在读取远端解析器首页</Text>
+            <Text style={styles.loadingStateText}>
+              切换分类或筛选时会重新请求真实来源，已加载的海报会自动替换。
+            </Text>
+          </View>
         ) : null}
         {renderDiscoverPosterGrid()}
       </View>
@@ -2219,19 +2253,19 @@ export default function App() {
         </View>
 
         <View style={styles.settingsSectionLabelWrap}>
-          <Text style={styles.settingsSectionLabel}>本地解析器</Text>
+          <Text style={styles.settingsSectionLabel}>远端解析器</Text>
         </View>
         <View style={styles.settingsGroup}>
           <View style={styles.panelHeader}>
-            <Text style={styles.sectionTitle}>本地解析器</Text>
-            <Text style={styles.sectionHint}>用于解析 CatVod 插件源的搜索和播放地址</Text>
+            <Text style={styles.sectionTitle}>远端解析器</Text>
+            <Text style={styles.sectionHint}>用于解析 CatVod 插件源，填地址和 Token 后即可搜索播放</Text>
           </View>
           <TextInput
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
             onChangeText={setPluginServerUrl}
-            placeholder={`本地解析器，例如 ${LOCAL_PARSER_HINT_URL}`}
+            placeholder={`解析服务地址，例如 ${REMOTE_PARSER_HINT_URL}`}
             placeholderTextColor="#8d96a0"
             style={styles.input}
             value={pluginServerUrl}
@@ -2240,7 +2274,7 @@ export default function App() {
             autoCapitalize="none"
             autoCorrect={false}
             onChangeText={setPluginServerToken}
-            placeholder="本地解析器 Token，可选"
+            placeholder="解析服务 Token"
             placeholderTextColor="#8d96a0"
             secureTextEntry
             style={styles.input}
@@ -2248,35 +2282,31 @@ export default function App() {
           />
           <CompactButton
             onPress={() => {
-              setPluginServerUrl(LOCAL_PARSER_HINT_URL);
-              setPluginServerToken('');
+              setPluginServerUrl(REMOTE_PARSER_HINT_URL);
               setPluginServerHealth(null);
               AsyncStorage.setItem(
                 STORAGE_KEYS.pluginServerUrl,
-                LOCAL_PARSER_HINT_URL
-              ).catch(() => setMessage('本机解析器地址保存失败'));
-              AsyncStorage.removeItem(STORAGE_KEYS.pluginServerToken).catch(() =>
-                setMessage('本地解析器 Token 清理失败')
-              );
-              setMessage(`已填入本地解析器地址：${LOCAL_PARSER_HINT_URL}`);
+                REMOTE_PARSER_HINT_URL
+              ).catch(() => setMessage('远端解析器地址保存失败'));
+              setMessage(`已填入远端解析器地址：${REMOTE_PARSER_HINT_URL}，请继续填写 Token`);
             }}
             variant="plain"
           >
-            使用本机解析器地址
+            使用推荐解析服务
           </CompactButton>
           <CompactButton
             onPress={() =>
-              savePluginServerUrl().catch(() => setMessage('本地解析器保存失败'))
+              savePluginServerUrl().catch(() => setMessage('远端解析器保存失败'))
             }
             variant="secondary"
           >
-            保存本地解析器
+            保存解析服务
           </CompactButton>
           <View style={styles.buttonRow}>
             <CompactButton
               disabled={checkingPluginServer}
               onPress={() =>
-                checkPluginServer().catch(() => setMessage('本地解析器检测失败'))
+                checkPluginServer().catch(() => setMessage('远端解析器检测失败'))
               }
               variant="plain"
             >
@@ -2515,6 +2545,9 @@ export default function App() {
                 <Text selectable style={styles.loadingStateText}>
                   {message || buildSearchLoadingMessage({ targetCount: activeSearchTargetCount })}
                 </Text>
+                <Text style={styles.loadingStateText}>
+                  已返回的海报会先显示，剩余来源继续搜索。
+                </Text>
               </View>
             ) : null}
             {searchResults.length || searchFailures.length ? (
@@ -2693,7 +2726,7 @@ export default function App() {
             }
             onPress={() =>
               playEpisode(primaryGroup, primaryEpisode, 0).catch(() =>
-                setMessage('播放地址解析失败')
+                setMessage(buildPlaybackFailureMessage('播放地址解析失败'))
               )
             }
             style={({ pressed }) => [
@@ -2751,7 +2784,7 @@ export default function App() {
                           key={episodeKey}
                           onPress={() =>
                             playEpisode(group, episode, episodeIndex).catch(() =>
-                              setMessage('播放地址解析失败')
+                              setMessage(buildPlaybackFailureMessage('播放地址解析失败'))
                             )
                           }
                           style={({ pressed }) => [

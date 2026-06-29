@@ -89,6 +89,29 @@ test('server accepts bearer token and forwards CatVod search requests to runner'
   ]);
 });
 
+test('server protects health check when token is configured', async () => {
+  const server = createParserServer({
+    runner: fixedRunner(),
+    token: 'secret-token',
+  });
+
+  const unauthorized = await server.inject({
+    method: 'GET',
+    path: '/health',
+  });
+  const authorized = await server.inject({
+    headers: {
+      authorization: 'Bearer secret-token',
+    },
+    method: 'GET',
+    path: '/health',
+  });
+
+  assert.equal(unauthorized.statusCode, 401);
+  assert.equal(authorized.statusCode, 200);
+  assert.equal(authorized.json().ok, true);
+});
+
 test('server forwards CatVod sources and home requests to runner', async () => {
   const calls = [];
   const server = createParserServer({

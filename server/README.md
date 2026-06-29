@@ -1,33 +1,62 @@
-# Ganggan Local Parser
+# Ganggan Remote Parser
 
-Local parser for sources that cannot safely run inside Expo Go or the iOS app.
-Run it on the same Windows computer as development, then let the iPhone connect
-through the local network.
+This service runs the CatVod/TVBox parser outside Expo Go. The iPhone app only
+stores the parser URL, Token, and user-entered source URL locally.
 
-## Local Run
+## Remote PM2 Deployment
+
+Current remote parser:
+
+```text
+http://47.97.25.185:3000
+```
+
+On a new server:
 
 ```bash
-npm --prefix server test
-$env:PLUGIN_SERVER_TOKEN="change-me"
-$env:PLUGIN_EXECUTION_TIMEOUT_MS="60000"
-$env:PLUGIN_SCRIPT_TIMEOUT_MS="20000"
-$env:PORT="3000"
-npm --prefix server start
+cd /root
+git clone https://github.com/zgou93777-cmyk/gangganTV.git
+cd /root/gangganTV
+git checkout codex/iptv-roadmap
+cd server
+npm install --omit=dev
+npm install -g pm2
+```
+
+Start with a required Token:
+
+```bash
+PORT=3000 \
+PLUGIN_SERVER_TOKEN='change-this-token' \
+PLUGIN_SCRIPT_TIMEOUT_MS=30000 \
+PLUGIN_EXECUTION_TIMEOUT_MS=180000 \
+pm2 start src/index.js --name ganggan-parser
+pm2 save
+```
+
+After pulling a new version or changing environment variables:
+
+```bash
+cd /root/gangganTV
+git pull
+cd server
+npm install --omit=dev
+PORT=3000 \
+PLUGIN_SERVER_TOKEN='change-this-token' \
+PLUGIN_SCRIPT_TIMEOUT_MS=30000 \
+PLUGIN_EXECUTION_TIMEOUT_MS=180000 \
+pm2 restart ganggan-parser --update-env
+pm2 save
 ```
 
 Health check:
 
 ```bash
-curl http://127.0.0.1:3000/health
+curl -H "Authorization: Bearer change-this-token" \
+  http://127.0.0.1:3000/health
 ```
 
-From the iPhone, use the computer LAN address, for example:
-
-```text
-http://192.168.220.41:3000
-```
-
-The health response includes capability flags:
+Expected response includes:
 
 ```json
 {
@@ -35,65 +64,56 @@ The health response includes capability flags:
   "service": "ganggan-plugin-parser",
   "capabilities": {
     "catvod": true,
+    "catvodHome": true,
+    "catvodSources": true,
     "tvboxRoutes": true,
     "tvboxRuntime": false
   }
 }
 ```
 
-`tvboxRoutes: true` means the HTTP API exists. `tvboxRuntime: false` means
-the Android TVBox Spider/JAR runtime is not connected yet, so `csp_*` sources
-can be imported and listed but cannot actually search/play through Spider yet.
+`tvboxRoutes: true` means the HTTP routes exist. `tvboxRuntime: false` means
+Android Spider/JAR sources are not connected yet, so those sources may import
+but cannot reliably search or play.
 
-## App Settings
+## App 设置
 
-For local Expo Go testing, keep the parser on this computer:
+In the app Settings page:
 
-1. Start the parser with `npm --prefix server start`.
-2. In the app settings, tap "使用本机解析器地址" or enter the LAN URL manually.
-3. Leave Token empty unless `PLUGIN_SERVER_TOKEN` was set before starting the parser.
-4. Tap "导入 CatVod 测试源" to add
-   `http://wexfnw:wexfnw@cat.999888987.xyz/index.js.md5`.
+- 远端解析器: `http://47.97.25.185:3000` or your new server URL
+- 解析服务 Token: the same `PLUGIN_SERVER_TOKEN`
+- 点播源接口: a user-provided CatVod source, for example
+  `http://wexfnw:wexfnw@cat.999888987.xyz/index.js.md5`
 
-This CatVod mirror has been verified locally for search and detail retrieval.
-The OK影视 root URLs such as `http://tv.999888987.xyz/` and
-`http://new.999888987.xyz/` also resolve to TVBox JSON configs, but their sites
-are Android `csp_*` Spider/JAR entries. They can be imported and listed before
-the Spider runtime exists, but search/play is expected to stay disabled until
-`tvboxRuntime` becomes `true`.
+Tap "保存解析服务", then "检测解析服务". Search and playback requests require
+the Token; leaving it blank should fail before making parser requests.
 
-Some CatVod play lines are netdisk resources and may time out or require account
-capabilities, so a timeout from `/catvod/play` does not mean the video player is
-broken.
+## Security Notes
 
-## Docker
+- Keep `PLUGIN_SERVER_TOKEN` private. Anyone with the URL and Token can call the
+  parser endpoints.
+- The app stores parser settings on the device only.
+- The app does not provide built-in content and does not upload user source
+  URLs anywhere except to the configured parser service for parsing.
+- Use a firewall or security group to allow only the needed port, currently
+  `3000`.
+
+## Useful PM2 Commands
 
 ```bash
-docker build -t ganggan-plugin-parser ./server
-docker run -d --name ganggan-plugin-parser \
-  -p 3000:3000 \
-  -e PLUGIN_SERVER_TOKEN=change-me \
-  -e PLUGIN_EXECUTION_TIMEOUT_MS=60000 \
-  -e PLUGIN_SCRIPT_TIMEOUT_MS=20000 \
-  --restart unless-stopped \
-  ganggan-plugin-parser
+pm2 status
+pm2 logs ganggan-parser
+pm2 restart ganggan-parser --update-env
+pm2 delete ganggan-parser
+pm2 save
 ```
-
-In the app settings, set:
-
-- Parser URL: `http://YOUR_COMPUTER_LAN_IP:3000`
-- Token: the same `PLUGIN_SERVER_TOKEN`
-
-Use the local network for development. Do not deploy to a slow public server for
-daily testing unless a real remote runtime is needed.
 
 ## Current Compatibility
 
-- Plain CatVod scripts with `search/detail/play` functions.
-- Fastify-style scripts exporting an `api(app)` route installer.
-- Magic-player bundles can run through the server-side host shim for search/detail/play.
-- TVBox `/tvbox/search`, `/tvbox/detail`, and `/tvbox/play` facade routes.
-- TVBox `csp_*` Spider/JAR sources still need a local Android/Dex runtime. The
-  Wex/OK影视 configs tested so far are `classes.dex` plus Android guard assets,
-  not ordinary JavaScript.
-- Some third-party routes still require account cookies or site-specific credentials; those return clear compatibility errors instead of crashing the app.
+- CatVod JS scripts with search, detail, play, home, category, and source list
+  support.
+- Magic-player bundles through the server-side host shim.
+- TVBox facade routes for later Android Spider/JAR runtime work.
+- Some third-party lines are netdisk or account-based resources. They may time
+  out or require cookies; the app should show a clear "switch route/source"
+  message instead of crashing.
