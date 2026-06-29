@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { WebView } from 'react-native-webview';
 import {
   KeyboardAvoidingView,
+  ActivityIndicator,
+  Alert,
   Image,
   Platform,
   Pressable,
@@ -87,8 +89,20 @@ const {
   resolveResultRuntimeSite,
 } = require('./src/search-result-runtime');
 const {
+  buildSearchTargets,
   searchAcrossSites,
 } = require('./src/search-workflow');
+const {
+  buildSourceStatus,
+  deleteConfigSource,
+  renameConfigSource,
+  selectDefaultSource,
+} = require('./src/source-management');
+const {
+  buildDetailLoadingMessage,
+  buildEpisodeLoadingMessage,
+  buildSearchLoadingMessage,
+} = require('./src/vod-ux');
 
 const BUILT_IN_TEST_CONFIG_URL = 'mock://demo-tvbox';
 const RECOMMENDED_CATVOD_SOURCE_URL =
@@ -129,6 +143,8 @@ export default function App() {
   const [vodUrl, setVodUrl] = useState('');
   const [configUrl, setConfigUrl] = useState('');
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
+  const [renamingSourceId, setRenamingSourceId] = useState('');
+  const [renamingSourceText, setRenamingSourceText] = useState('');
   const [configSourceText, setConfigSourceText] = useState('');
   const [pluginServerUrl, setPluginServerUrl] = useState('');
   const [pluginServerToken, setPluginServerToken] = useState('');
@@ -224,6 +240,10 @@ export default function App() {
   const configDiagnostics = useMemo(
     () => buildConfigDiagnostics({ sources: configSources, sites }),
     [configSources, sites]
+  );
+  const activeSearchTargetCount = useMemo(
+    () => buildSearchTargets({ sites, selectedSourceIds: selectedSearchSourceIds }).length,
+    [selectedSearchSourceIds, sites]
   );
 
   useEffect(() => {
@@ -463,11 +483,17 @@ export default function App() {
           reason: classification.reason,
         };
         const nextSources = upsertById(configSources, pluginSource);
+        const serverSite = buildPluginServerSite(pluginSource, cleanUrl);
+        const nextSites = upsertById(sites, serverSite);
 
         setConfigSources(nextSources);
+        setSites(nextSites);
+        setSelectedSiteId(serverSite.id);
         await Promise.all([
           AsyncStorage.setItem(STORAGE_KEYS.configUrl, cleanUrl),
           saveJson(STORAGE_KEYS.configSources, nextSources),
+          saveJson(STORAGE_KEYS.sites, nextSites),
+          AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, serverSite.id),
         ]);
         loadPluginServerSite(pluginSource, cleanUrl);
         setMessage(
@@ -537,6 +563,120 @@ export default function App() {
       setMessage(`已选择 ${site.name}`);
       setActiveTab('discover');
     }
+  }
+
+  async function renameSource(sourceId) {
+    const cleanName = renamingSourceText.trim();
+
+    if (!cleanName) {
+      setMessage('请输入新的源名称');
+      return;
+    }
+
+    const nextState = renameConfigSource({
+      name: cleanName,
+      sourceId,
+      sources: configSources,
+      sites,
+    });
+
+    setConfigSources(nextState.sources);
+    setSites(nextState.sites);
+    setRenamingSourceId('');
+    setRenamingSourceText('');
+
+    await Promise.all([
+      saveJson(STORAGE_KEYS.configSources, nextState.sources),
+      saveJson(STORAGE_KEYS.sites, nextState.sites),
+    ]);
+    setMessage(`已重命名为 ${cleanName}`);
+  }
+
+  function requestDeleteSource(source) {
+    if (!source?.id) {
+      return;
+    }
+
+    Alert.alert(
+      '删除配置源',
+      `确定删除「${source.name || '未命名源'}」吗？相关站点也会从本机移除。`,
+      [
+        {
+          text: '取消',
+          style: 'cancel',
+        },
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: () => {
+            deleteSource(source).catch((deleteError) =>
+              setMessage(deleteError?.message || '删除配置源失败')
+            );
+          },
+        },
+      ]
+    );
+  }
+
+  async function deleteSource(source) {
+    const nextState = deleteConfigSource({
+      configUrl,
+      selectedSearchSourceIds,
+      selectedSiteId,
+      sourceId: source.id,
+      sources: configSources,
+      sites,
+    });
+
+    setConfigSources(nextState.sources);
+    setSites(nextState.sites);
+    setSelectedSiteId(nextState.selectedSiteId);
+    setSelectedSearchSourceIds(nextState.selectedSearchSourceIds);
+    setConfigUrl(nextState.configUrl);
+    setSearchResults([]);
+    setSearchFailures([]);
+    setSelectedResult(null);
+    setSelectedDetail(null);
+    setSourceMenuOpen(false);
+
+    if (catVodSource?.id === source.id) {
+      setCatVodSource(null);
+      setCatVodReady(false);
+      setCatVodExecutorHtml('');
+      catVodRuntimeRef.current = null;
+    }
+
+    await Promise.all([
+      saveJson(STORAGE_KEYS.configSources, nextState.sources),
+      saveJson(STORAGE_KEYS.sites, nextState.sites),
+      nextState.selectedSiteId
+        ? AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, nextState.selectedSiteId)
+        : AsyncStorage.removeItem(STORAGE_KEYS.selectedSiteId),
+      nextState.configUrl
+        ? AsyncStorage.setItem(STORAGE_KEYS.configUrl, nextState.configUrl)
+        : AsyncStorage.removeItem(STORAGE_KEYS.configUrl),
+    ]);
+    setMessage(`已删除 ${source.name || '配置源'}`);
+  }
+
+  async function makeSourceDefault(source) {
+    const nextSelectedSiteId = selectDefaultSource({
+      sourceId: source.id,
+      sites,
+    });
+
+    if (!nextSelectedSiteId) {
+      setMessage('这个源当前没有可设为默认的可搜索站点');
+      return;
+    }
+
+    setSelectedSiteId(nextSelectedSiteId);
+    setSearchResults([]);
+    setSearchFailures([]);
+    setSelectedResult(null);
+    setSelectedDetail(null);
+    await AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, nextSelectedSiteId);
+    setMessage(`已设为默认源：${source.name || '未命名源'}`);
   }
 
   async function testSelectedSite() {
@@ -673,11 +813,17 @@ export default function App() {
     setSites(nextSites);
     setSelectedSiteId(runtimeSite.id);
     setActiveTab('discover');
+    saveJson(STORAGE_KEYS.sites, nextSites).catch(() =>
+      setMessage('插件执行器站点保存失败')
+    );
+    AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, runtimeSite.id).catch(() =>
+      setMessage('默认站点保存失败')
+    );
     setMessage('正在加载插件执行器');
   }
 
-  function loadPluginServerSite(source, scriptUrl) {
-    const serverSite = {
+  function buildPluginServerSite(source, scriptUrl) {
+    return {
       id: 'catvod-server-runtime',
       siteKey: 'catvod-server-runtime',
       name: `${source.name || 'CatVod'} 服务端插件`,
@@ -690,14 +836,25 @@ export default function App() {
       runtime: 'catvod-server',
       scriptUrl,
     };
+  }
+
+  function loadPluginServerSite(source, scriptUrl) {
+    const serverSite = buildPluginServerSite(source, scriptUrl);
+    const nextSites = upsertById(sites, serverSite);
 
     setCatVodSource({
       ...source,
       scriptUrl,
     });
-    setSites(upsertById(sites, serverSite));
+    setSites(nextSites);
     setSelectedSiteId(serverSite.id);
     setActiveTab('discover');
+    saveJson(STORAGE_KEYS.sites, nextSites).catch(() =>
+      setMessage('本地解析器站点保存失败')
+    );
+    AsyncStorage.setItem(STORAGE_KEYS.selectedSiteId, serverSite.id).catch(() =>
+      setMessage('默认站点保存失败')
+    );
     setMessage(
       pluginServerUrl
         ? '已准备使用本地解析器'
@@ -823,14 +980,19 @@ export default function App() {
       return;
     }
 
+    const targets = buildSearchTargets({
+      selectedSourceIds: selectedSearchSourceIds,
+      sites,
+    });
+
     setLoadingSearch(true);
     setActiveType('config');
-    setMessage('正在搜索');
+    setMessage(buildSearchLoadingMessage({ targetCount: targets.length }));
     setSearchFailures([]);
     setActiveSearchBucketId('all');
 
     try {
-      const { failures, results, targets } = await searchAcrossSites({
+      const { failures, results, targets: searchedTargets } = await searchAcrossSites({
         getSkipReason: getSearchSkipReason,
         keyword: cleanKeyword,
         selectedSourceIds: selectedSearchSourceIds,
@@ -838,8 +1000,8 @@ export default function App() {
         searchSite,
       });
 
-      if (targets.length) {
-        setSelectedSiteId(targets[0].id);
+      if (searchedTargets.length) {
+        setSelectedSiteId(searchedTargets[0].id);
       }
       setSearchResults(results);
       setSearchFailures(failures);
@@ -849,7 +1011,7 @@ export default function App() {
         buildSearchMessage({
           failureCount: failures.length,
           resultCount: results.length,
-          targetCount: targets.length,
+          targetCount: searchedTargets.length,
         })
       );
     } catch (searchError) {
@@ -910,7 +1072,7 @@ export default function App() {
     setSelectedDetail(null);
     setActivePage('detail');
     setLoadingDetailId(result.id);
-    setMessage('正在读取播放列表');
+    setMessage(buildDetailLoadingMessage(result.name || result.title));
 
     try {
       const detail = isTvBoxSpiderSite(resultSite)
@@ -930,9 +1092,7 @@ export default function App() {
         : await fetchTvBoxDetail(resultSite, result.id);
 
       setSelectedDetail(detail);
-      setMessage(
-        detail.playGroups.length ? '请选择播放项' : '该结果没有可播放列表'
-      );
+      setMessage(detail.playGroups.length ? '请选择播放项' : '该结果没有可播放列表');
     } catch (detailError) {
       setMessage(detailError?.message || '播放列表读取失败');
     } finally {
@@ -954,7 +1114,7 @@ export default function App() {
 
     const episodeKey = `${group.name}-${episodeIndex}-${episode.name}`;
     setLoadingEpisodeKey(episodeKey);
-    setMessage('正在解析播放地址');
+    setMessage(buildEpisodeLoadingMessage(episode.name));
 
     try {
       const playableUrl = isTvBoxSpiderSite(playbackSite)
@@ -1270,11 +1430,13 @@ export default function App() {
         {cards.map((card) => (
           <Pressable
             accessibilityRole="button"
+            disabled={Boolean(loadingDetailId)}
             key={card.id}
             onPress={() => loadDetail(card.raw)}
             style={({ pressed }) => [
               styles.vodCard,
               selectedResult?.id === card.raw.id && styles.vodCardActive,
+              loadingDetailId && loadingDetailId !== card.raw.id && styles.cardDisabled,
               pressed && styles.buttonPressed,
             ]}
           >
@@ -1296,6 +1458,11 @@ export default function App() {
                 <Text numberOfLines={1} style={styles.posterBadge}>
                   {card.badge}
                 </Text>
+              ) : null}
+              {loadingDetailId === card.raw.id ? (
+                <View style={styles.posterLoadingOverlay}>
+                  <ActivityIndicator color="#ffffff" />
+                </View>
               ) : null}
             </View>
             <Text numberOfLines={2} style={styles.vodCardTitle}>
@@ -1864,7 +2031,16 @@ export default function App() {
           ) : null}
           <ConfigDiagnosticsPanel diagnostics={configDiagnostics} />
           <SourceList
+            onDeleteSource={requestDeleteSource}
+            onMakeDefault={makeSourceDefault}
+            onRenameSource={renameSource}
             onVerifyPlugin={verifyPluginSource}
+            renamingSourceId={renamingSourceId}
+            renamingSourceText={renamingSourceText}
+            selectedSiteId={selectedSiteId}
+            setRenamingSourceId={setRenamingSourceId}
+            setRenamingSourceText={setRenamingSourceText}
+            sites={sites}
             sources={configSources}
             verifyingPlugin={verifyingPlugin}
           />
@@ -2032,6 +2208,7 @@ export default function App() {
           </Pressable>
           <TextInput
             autoCorrect={false}
+            editable={!loadingSearch}
             onChangeText={setSearchKeyword}
             onSubmitEditing={() =>
               searchSelectedSite().catch(() => setMessage('搜索失败'))
@@ -2044,9 +2221,11 @@ export default function App() {
           />
           <Pressable
             accessibilityRole="button"
+            disabled={loadingSearch}
             onPress={() => setSourceFilterOpen(true)}
             style={({ pressed }) => [
               styles.searchSourceButton,
+              loadingSearch && styles.buttonDisabled,
               pressed && styles.buttonPressed,
             ]}
           >
@@ -2063,7 +2242,13 @@ export default function App() {
             showsVerticalScrollIndicator={false}
           >
             {loadingSearch ? (
-              <Text style={styles.emptyText}>正在搜索...</Text>
+              <View style={styles.loadingStatePanel}>
+                <ActivityIndicator color="#2f80ed" />
+                <Text style={styles.loadingStateTitle}>正在搜索真实来源</Text>
+                <Text selectable style={styles.loadingStateText}>
+                  {buildSearchLoadingMessage({ targetCount: activeSearchTargetCount })}
+                </Text>
+              </View>
             ) : searchResults.length || searchFailures.length ? (
               renderVodResultGrid(vodResultCards)
             ) : (
@@ -2113,6 +2298,7 @@ export default function App() {
                 return (
                   <Pressable
                     accessibilityRole="button"
+                    disabled={loadingSearch}
                     key={site.id}
                     onPress={() => {
                       setSelectedSearchSourceIds((currentIds) => {
@@ -2130,6 +2316,7 @@ export default function App() {
                     style={({ pressed }) => [
                       styles.sourceFilterItem,
                       isSelected && styles.sourceFilterItemActive,
+                      loadingSearch && styles.buttonDisabled,
                       pressed && styles.buttonPressed,
                     ]}
                   >
@@ -2208,7 +2395,12 @@ export default function App() {
           ) : null}
           <Pressable
             accessibilityRole="button"
-            disabled={!primaryGroup || !primaryEpisode || Boolean(loadingEpisodeKey)}
+            disabled={
+              !primaryGroup ||
+              !primaryEpisode ||
+              Boolean(loadingEpisodeKey) ||
+              Boolean(loadingDetailId)
+            }
             onPress={() =>
               playEpisode(primaryGroup, primaryEpisode, 0).catch(() =>
                 setMessage('播放地址解析失败')
@@ -2217,13 +2409,18 @@ export default function App() {
             style={({ pressed }) => [
               styles.detailPlayButton,
               (!primaryGroup || !primaryEpisode) && styles.buttonDisabled,
+              (loadingEpisodeKey || loadingDetailId) && styles.buttonDisabled,
               pressed && styles.buttonPressed,
             ]}
           >
-            <Text style={styles.detailPlayIcon}>▶</Text>
+            {loadingEpisodeKey ? (
+              <ActivityIndicator color="#050505" />
+            ) : (
+              <Text style={styles.detailPlayIcon}>▶</Text>
+            )}
             <View>
               <Text style={styles.detailPlayTitle}>
-                {loadingEpisodeKey ? '解析中' : '播放'}
+                {loadingDetailId ? '加载中' : loadingEpisodeKey ? '解析中' : '播放'}
               </Text>
               <Text numberOfLines={1} style={styles.detailPlaySubtitle}>
                 {primaryEpisode?.name || selectedPosterDetail.remarks || '暂无播放项'}
@@ -2260,6 +2457,7 @@ export default function App() {
                       return (
                         <Pressable
                           accessibilityRole="button"
+                          disabled={Boolean(loadingEpisodeKey) || Boolean(loadingDetailId)}
                           key={episodeKey}
                           onPress={() =>
                             playEpisode(group, episode, episodeIndex).catch(() =>
@@ -2268,12 +2466,26 @@ export default function App() {
                           }
                           style={({ pressed }) => [
                             styles.detailEpisodeButton,
+                            loadingEpisodeKey === episodeKey &&
+                              styles.detailEpisodeButtonLoading,
+                            (loadingEpisodeKey || loadingDetailId) &&
+                              loadingEpisodeKey !== episodeKey &&
+                              styles.buttonDisabled,
                             pressed && styles.buttonPressed,
                           ]}
                         >
-                          <Text numberOfLines={1} style={styles.detailEpisodeTitle}>
-                            {loadingEpisodeKey === episodeKey ? '解析中' : episode.name}
-                          </Text>
+                          {loadingEpisodeKey === episodeKey ? (
+                            <View style={styles.episodeLoadingInline}>
+                              <ActivityIndicator color="#ffffff" />
+                              <Text numberOfLines={1} style={styles.detailEpisodeTitle}>
+                                解析中
+                              </Text>
+                            </View>
+                          ) : (
+                            <Text numberOfLines={1} style={styles.detailEpisodeTitle}>
+                              {episode.name}
+                            </Text>
+                          )}
                         </Pressable>
                       );
                     })}
@@ -2967,44 +3179,162 @@ function DiagnosticTile({ label, value }) {
   );
 }
 
-function SourceList({ onVerifyPlugin, sources, verifyingPlugin }) {
+function SourceList({
+  onDeleteSource,
+  onMakeDefault,
+  onRenameSource,
+  onVerifyPlugin,
+  renamingSourceId,
+  renamingSourceText,
+  selectedSiteId,
+  setRenamingSourceId,
+  setRenamingSourceText,
+  sites,
+  sources,
+  verifyingPlugin,
+}) {
   if (!sources.length) {
     return null;
   }
 
   return (
     <View style={styles.sourceList}>
-      {sources.map((source) => (
-        <View key={source.id} style={styles.sourceRow}>
-          <View style={styles.rowMain}>
-            <Text style={styles.rowTitle}>{source.name}</Text>
-            <Text numberOfLines={1} selectable style={styles.rowMeta}>
-              {source.url}
-            </Text>
-          </View>
-          {source.kind === 'plugin' && onVerifyPlugin ? (
-            <Pressable
-              accessibilityRole="button"
-              disabled={verifyingPlugin}
-              onPress={() => onVerifyPlugin(source)}
-              style={({ pressed }) => [
-                styles.inlineActionButton,
-                styles.inlineActionButtonMuted,
-                verifyingPlugin && styles.buttonDisabled,
-                pressed && styles.buttonPressed,
-              ]}
-            >
-              <Text style={styles.inlineActionText}>
-                {verifyingPlugin ? '验证中' : '验证'}
+      {sources.map((source) => {
+        const isRenaming = renamingSourceId === source.id;
+        const status = buildSourceStatus({
+          selectedSiteId,
+          source,
+          sites,
+        });
+
+        return (
+          <View key={source.id} style={styles.sourceManageCard}>
+            <View style={styles.sourceManageTop}>
+              <View style={styles.rowMain}>
+                {isRenaming ? (
+                  <TextInput
+                    autoCorrect={false}
+                    onChangeText={setRenamingSourceText}
+                    onSubmitEditing={() => onRenameSource(source.id)}
+                    placeholder="新的源名称"
+                    placeholderTextColor="#8d96a0"
+                    returnKeyType="done"
+                    style={styles.sourceRenameInput}
+                    value={renamingSourceText}
+                  />
+                ) : (
+                  <Text style={styles.rowTitle}>{source.name}</Text>
+                )}
+                <Text numberOfLines={1} selectable style={styles.rowMeta}>
+                  {source.url}
+                </Text>
+                <Text style={styles.sourceStatusText}>
+                  {status.isDefault ? '默认 · ' : ''}
+                  {status.label} · {status.searchableCount}/{status.siteCount} 可用
+                </Text>
+              </View>
+              <Text
+                style={[
+                  styles.badge,
+                  status.tone !== 'ready' && styles.badgeMuted,
+                ]}
+              >
+                {source.kind === 'plugin' ? '插件源' : '配置'}
               </Text>
-            </Pressable>
-          ) : (
-            <Text style={[styles.badge, source.kind === 'plugin' && styles.badgeMuted]}>
-              {source.kind === 'plugin' ? '插件源' : '配置'}
-            </Text>
-          )}
-        </View>
-      ))}
+            </View>
+
+            <View style={styles.sourceActionRow}>
+              {isRenaming ? (
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => onRenameSource(source.id)}
+                    style={({ pressed }) => [
+                      styles.miniActionButton,
+                      styles.miniActionPrimary,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={styles.miniActionTextPrimary}>保存</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setRenamingSourceId('');
+                      setRenamingSourceText('');
+                    }}
+                    style={({ pressed }) => [
+                      styles.miniActionButton,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={styles.miniActionText}>取消</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={status.isDefault || !status.searchableCount}
+                    onPress={() => onMakeDefault(source)}
+                    style={({ pressed }) => [
+                      styles.miniActionButton,
+                      (status.isDefault || !status.searchableCount) &&
+                        styles.buttonDisabled,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={styles.miniActionText}>
+                      {status.isDefault ? '已默认' : '默认'}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setRenamingSourceId(source.id);
+                      setRenamingSourceText(source.name || '');
+                    }}
+                    style={({ pressed }) => [
+                      styles.miniActionButton,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={styles.miniActionText}>重命名</Text>
+                  </Pressable>
+                  {source.kind === 'plugin' && onVerifyPlugin ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={verifyingPlugin}
+                      onPress={() => onVerifyPlugin(source)}
+                      style={({ pressed }) => [
+                        styles.miniActionButton,
+                        styles.miniActionBlue,
+                        verifyingPlugin && styles.buttonDisabled,
+                        pressed && styles.buttonPressed,
+                      ]}
+                    >
+                      <Text style={styles.miniActionTextBlue}>
+                        {verifyingPlugin ? '验证中' : '验证'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => onDeleteSource(source)}
+                    style={({ pressed }) => [
+                      styles.miniActionButton,
+                      styles.miniActionDanger,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={styles.miniActionTextDanger}>删除</Text>
+                  </Pressable>
+                </>
+              )}
+            </View>
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -3811,6 +4141,29 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: 19,
   },
+  loadingStatePanel: {
+    alignItems: 'center',
+    backgroundColor: '#f7f7f8',
+    borderRadius: 20,
+    gap: 10,
+    justifyContent: 'center',
+    minHeight: 180,
+    padding: 20,
+    width: '100%',
+  },
+  loadingStateTitle: {
+    color: '#111111',
+    fontSize: 17,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  loadingStateText: {
+    color: '#8e8e93',
+    fontSize: 13,
+    letterSpacing: 0,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
   buttonRow: {
     flexDirection: 'row',
     gap: 9,
@@ -3850,6 +4203,9 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.55,
+  },
+  cardDisabled: {
+    opacity: 0.42,
   },
   searchSplit: {
     alignItems: 'flex-start',
@@ -4193,11 +4549,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     width: '47.8%',
   },
+  detailEpisodeButtonLoading: {
+    backgroundColor: 'rgba(47, 128, 237, 0.56)',
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+  },
   detailEpisodeTitle: {
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '800',
     letterSpacing: 0,
+  },
+  episodeLoadingInline: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
   },
   detailEmptyEpisodes: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
@@ -4342,6 +4708,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
     width: '100%',
+  },
+  posterLoadingOverlay: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.38)',
+    bottom: 0,
+    justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   posterImage: {
     height: '100%',
@@ -4744,6 +5120,81 @@ const styles = StyleSheet.create({
   },
   sourceList: {
     gap: 8,
+  },
+  sourceManageCard: {
+    backgroundColor: '#f7f7f8',
+    borderRadius: 18,
+    gap: 10,
+    padding: 12,
+  },
+  sourceManageTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  sourceStatusText: {
+    color: '#2f80ed',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  sourceActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  sourceRenameInput: {
+    backgroundColor: '#ffffff',
+    borderColor: '#dbeafe',
+    borderRadius: 12,
+    borderWidth: 1,
+    color: '#111111',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0,
+    minHeight: 40,
+    paddingHorizontal: 12,
+  },
+  miniActionButton: {
+    alignItems: 'center',
+    backgroundColor: '#eeeeef',
+    borderRadius: 12,
+    justifyContent: 'center',
+    minHeight: 34,
+    paddingHorizontal: 11,
+  },
+  miniActionPrimary: {
+    backgroundColor: '#34c759',
+  },
+  miniActionBlue: {
+    backgroundColor: '#e7f1ff',
+  },
+  miniActionDanger: {
+    backgroundColor: '#fff1f2',
+  },
+  miniActionText: {
+    color: '#111111',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  miniActionTextPrimary: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  miniActionTextBlue: {
+    color: '#1769d7',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  miniActionTextDanger: {
+    color: '#be123c',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0,
   },
   sourceRow: {
     alignItems: 'center',
